@@ -38,8 +38,23 @@ export interface CircuitTemplate {
   /** One plain-English line. */
   description: string;
   numQubits: number;
-  /** Builds the circuit. Random circuits draw new angles on every call, using `random` (uniform in [0, 1)). */
-  build: (random?: () => number) => BuiltCircuit;
+  /**
+   * Builds the circuit. Random circuits draw new angles on every call, using
+   * `random` (uniform in [0, 1)), unless `angles` gives them (one per qubit,
+   * e.g. carried over to the composer).
+   */
+  build: (options?: BuildOptions) => BuiltCircuit;
+}
+
+export interface BuildOptions {
+  random?: () => number;
+  angles?: HaarAngles[];
+}
+
+/** Preset angles when they cover every qubit, otherwise new random ones. */
+function haarFor(numQubits: number, { random = Math.random, angles }: BuildOptions = {}): HaarAngles[] {
+  if (angles && angles.length === numQubits && angles.every((a, q) => a.qubit === q)) return angles;
+  return range(numQubits).map((q) => haarAngles(q, random));
 }
 
 const h = (q: number): QuantumCircuitInstruction => ({ name: "h", qubits: [q] });
@@ -89,6 +104,15 @@ function haarGates(angles: HaarAngles[]): QuantumCircuitInstruction[] {
   return angles.flatMap((a) => [rz(a.qubit, a.lambda), ry(a.qubit, a.theta), rz(a.qubit, a.phi)]);
 }
 
+/**
+ * GHZ on n qubits: H on q0, a CNOT chain q0 -> q1 -> ... -> q(n-1), then
+ * measure every qubit. The shared "GHZ" uses 3; the composer's "GHZ (all
+ * qubits)" uses the circuit's current qubit count.
+ */
+export function ghzPayload(numQubits: number): QuantumCircuitPayload {
+  return payload("ghz", numQubits, [h(0), ...range(numQubits - 1).map((q) => cx(q, q + 1))]);
+}
+
 // Bernstein-Vazirani: the secret, read with the highest bit on the left, so
 // data qubit q holds character SECRET[SECRET.length - 1 - q].
 const BV_SECRET = "101";
@@ -123,7 +147,7 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     description: "Three entangled qubits: all 0s or all 1s.",
     numQubits: 3,
     build: () => ({
-      payload: payload("ghz", 3, [h(0), cx(0, 1), cx(1, 2)]),
+      payload: ghzPayload(3),
       expect: "Expect 000 and 111 about half the time each.",
     }),
   },
@@ -133,8 +157,8 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     name: "Haar random (1 qubit)",
     description: "One qubit turned to a random direction.",
     numQubits: 1,
-    build: (random = Math.random) => {
-      const angles = [haarAngles(0, random)];
+    build: (options) => {
+      const angles = haarFor(1, options);
       return {
         payload: payload("haar-random-1", 1, haarGates(angles)),
         expect: `Expect 1 about ${pct(probabilityOfOne(angles[0]))} of the time.`,
@@ -148,8 +172,8 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     name: "Haar random (2 qubits)",
     description: "Each qubit turned to its own random direction.",
     numQubits: 2,
-    build: (random = Math.random) => {
-      const angles = [haarAngles(0, random), haarAngles(1, random)];
+    build: (options) => {
+      const angles = haarFor(2, options);
       return {
         payload: payload("haar-random-2", 2, haarGates(angles)),
         expect: `Expect q0 to read 1 about ${pct(probabilityOfOne(angles[0]))} of the time and q1 about ${pct(probabilityOfOne(angles[1]))}.`,
@@ -216,4 +240,35 @@ export function isCircuitTemplateId(value: string | undefined): value is Circuit
 /** The templates that fit a backend with this many qubits. */
 export function templatesForQubits(maxQubits: number): CircuitTemplate[] {
   return CIRCUIT_TEMPLATES.filter((t) => t.numQubits <= maxQubits);
+}
+
+// --- Opening a template in the composer -----------------------------------
+// /composer?template=haar-2&angles=theta,phi,lambda;theta,phi,lambda
+// Angles go in full precision, so the composer builds exactly the circuit
+// the popup showed.
+
+/** Link to /composer with this template loaded (and its Haar angles, if any). */
+export function composerHref(id: CircuitTemplateId, built: BuiltCircuit): string {
+  const params = new URLSearchParams({ template: id });
+  if (built.angles) params.set("angles", built.angles.map((a) => [a.theta, a.phi, a.lambda].join(",")).join(";"));
+  return `/composer?${params.toString()}`;
+}
+
+/** The template a /composer link asks for, built with its angles; null when the link names none. Bad angles fall back to new random ones. */
+export function templateFromQuery(
+  template: string | string[] | undefined,
+  angles: string | string[] | undefined,
+): { template: CircuitTemplate; built: BuiltCircuit } | null {
+  const id = Array.isArray(template) ? template[0] : template;
+  if (!isCircuitTemplateId(id)) return null;
+  const raw = Array.isArray(angles) ? angles[0] : angles;
+  let parsed: HaarAngles[] | undefined;
+  if (raw) {
+    const rows = raw.split(";").map((row) => row.split(",").map(Number));
+    if (rows.every((r) => r.length === 3 && r.every(Number.isFinite))) {
+      parsed = rows.map(([theta, phi, lambda], qubit) => ({ qubit, theta, phi, lambda }));
+    }
+  }
+  const t = circuitTemplate(id);
+  return { template: t, built: t.build({ angles: parsed }) };
 }

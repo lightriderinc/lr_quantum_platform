@@ -3,6 +3,7 @@
 import {
   circuitStats,
   formatAngle,
+  fromLrCircuit,
   gateDef,
   gatesAfterMeasure,
   maxQubitsFor,
@@ -16,7 +17,9 @@ import {
   type GateName,
   type PlacedGate,
 } from "@/lib/composer/circuit";
-import { CIRCUIT_TEMPLATES, editorReducer, initialEditorState, type CircuitTemplate } from "@/lib/composer/editor";
+import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
+import type { QuantumCircuitPayload } from "@/lib/quantum/client";
+import { editorReducer, initialEditorState, newGateId } from "@/lib/composer/editor";
 import { outcomeProbabilities, qubitSummaries, simulate } from "@/lib/composer/statevector";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -54,8 +57,15 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
 }
 
-export default function Composer({ isAuthenticated }: { isAuthenticated: boolean }) {
-  const [state, dispatch] = useReducer(editorReducer, STARTER, initialEditorState);
+export default function Composer({
+  isAuthenticated,
+  initialCircuit,
+}: {
+  isAuthenticated: boolean;
+  /** Circuit to start from instead of the Bell pair, e.g. a template opened from a submit popup. */
+  initialCircuit?: Circuit;
+}) {
+  const [state, dispatch] = useReducer(editorReducer, initialCircuit ?? STARTER, initialEditorState);
   const circuit = state.present;
   const [tool, setTool] = useState<GateName | null>(null);
   const [angleText, setAngleText] = useState("pi/2");
@@ -214,8 +224,11 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
               <MdPlaylistAddCheck /> Measure all
             </button>
             <TemplatesMenu
-              onPick={(template) => {
-                dispatch({ type: "template", template });
+              maxQubits={maxQubits}
+              numQubits={circuit.numQubits}
+              onLoad={(templatePayload) => {
+                // Built by the menu, not the reducer: Haar templates draw new angles on each load.
+                dispatch({ type: "template", circuit: fromLrCircuit(templatePayload, newGateId) });
                 setSelectedId(null);
                 setPending(null);
               }}
@@ -304,10 +317,36 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
   );
 }
 
-// Templates: ready-made circuits. Each replaces the circuit as one undo step.
-function TemplatesMenu({ onPick }: { onPick: (template: CircuitTemplate) => void }) {
+// Templates: the shared list (lib/circuits/templates.ts), plus a
+// composer-only "GHZ (all qubits)" across the circuit's current qubit count.
+// Each replaces the circuit as one undo step.
+function TemplatesMenu({
+  maxQubits,
+  numQubits,
+  onLoad,
+}: {
+  maxQubits: number;
+  numQubits: number;
+  onLoad: (payload: QuantumCircuitPayload) => void;
+}) {
+  const templates = templatesForQubits(maxQubits);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const item = (key: string, name: string, description: string, build: () => QuantumCircuitPayload) => (
+    <button
+      key={key}
+      type="button"
+      role="menuitem"
+      onClick={() => {
+        onLoad(build());
+        setOpen(false);
+      }}
+      className="block w-full cursor-pointer default-radius px-3 py-1.5 text-left hover:bg-gray-50"
+    >
+      <span className="block text-sm font-medium text-gray-900">{name}</span>
+      <span className="block text-xs text-gray-500">{description}</span>
+    </button>
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -337,22 +376,33 @@ function TemplatesMenu({ onPick }: { onPick: (template: CircuitTemplate) => void
         Templates <MdExpandMore />
       </button>
       {open && (
-        <div role="menu" className="absolute left-0 top-full z-30 mt-1 w-72 default-radius border border-gray-200 bg-white p-1 shadow-lg">
-          {CIRCUIT_TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onPick(t.id);
-                setOpen(false);
-              }}
-              className="block w-full cursor-pointer default-radius px-3 py-2 text-left hover:bg-gray-50"
-            >
-              <span className="block text-sm font-medium text-gray-900">{t.label}</span>
-              <span className="block text-xs text-gray-500">{t.description} Replaces the current circuit.</span>
-            </button>
-          ))}
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-30 mt-1 max-h-[70vh] w-80 overflow-y-auto default-radius border border-gray-200 bg-white p-1 shadow-lg"
+        >
+          <p className="px-3 pb-1 pt-2 text-xs text-gray-500">Loading a template replaces the current circuit.</p>
+          {CIRCUIT_SECTIONS.map((section) => {
+            const inSection = templates.filter((t) => t.section === section);
+            if (inSection.length === 0) return null;
+            return (
+              <div key={section} role="group" aria-label={section}>
+                <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{section}</p>
+                {inSection.flatMap((t) => {
+                  const entry = item(t.id, t.name, t.description, () => t.build().payload);
+                  if (t.id !== "ghz") return [entry];
+                  return [
+                    entry,
+                    item(
+                      "ghz-all",
+                      "GHZ (all qubits)",
+                      `All ${numQubits} ${numQubits === 1 ? "qubit" : "qubits"} entangled: all 0s or all 1s.`,
+                      () => ghzPayload(numQubits),
+                    ),
+                  ];
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ import { useJobSubmission } from "@/hooks/useJobSubmission";
 import {
   CIRCUIT_SECTIONS,
   circuitTemplate,
+  composerHref,
   templatesForQubits,
   type BuiltCircuit,
   type CircuitTemplateId,
@@ -29,12 +30,15 @@ function select(id: CircuitTemplateId): Selection {
 }
 
 /**
- * Shared circuit-submission modal — the form/schematic/result logic
- * DemoCircuitModal originally built, generalized to take any backend instead
- * of a hardcoded one. Used by:
+ * The one submit popup: every "submit a circuit" entry opens this, with the
+ * shared circuit list (lib/circuits/templates.ts), grouped by section, with
+ * circuits wider than the backend hidden. Used by:
  *   - the Dashboard's "Submit sample circuits" tile (backend="iqm-garnet-mock")
- *   - the /backends catalog's "Submit a job" button on each of the 6 IQM cards
+ *   - every /backends card's "Submit a sample circuit" (BackendModal), with
+ *     that card's backend, and the Cepheus page's Connection tab
+ *   - the dashboard and /reservations reservation rows
  *   - (via NewJobModal) the Jobs page's real-hardware submission form
+ *   - the classroom's "Run on simulator" buttons
  *
  * The credit gate only applies when the backend actually costs something —
  * mock backends (costPerShotCents: 0) skip the /api/billing/credits fetch
@@ -195,7 +199,12 @@ export default function BackendSubmitModal({
             {/* Right: circuit schematic (persists across both views, hidden when blocked by credits) */}
             {!blockedByCredits && (
               <div>
-                <TemplateSchematic template={circuitTemplate(selection.id)} built={selection.built} />
+                <TemplateSchematic
+                  template={circuitTemplate(selection.id)}
+                  built={selection.built}
+                  onNewAngles={() => setSelection(select(selection.id))}
+                  composerHref={composerHref(selection.id, selection.built)}
+                />
               </div>
             )}
           </div>

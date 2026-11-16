@@ -5,8 +5,10 @@ import { describe, expect, test } from "vitest";
 import {
   CIRCUIT_TEMPLATES,
   circuitTemplate,
+  composerHref,
   haarAngles,
   probabilityOfOne,
+  templateFromQuery,
   templatesForQubits,
   type CircuitTemplateId,
 } from "./templates";
@@ -92,7 +94,7 @@ describe("circuit templates", () => {
     const seq = [0.1, 0.7, 0.3, 0.9, 0.25, 0.6];
     let i = 0;
     const random = () => seq[i++ % seq.length];
-    const built = circuitTemplate("haar-2").build(random);
+    const built = circuitTemplate("haar-2").build({ random });
     expect(built.angles).toHaveLength(2);
     const sim = outcomeProbabilities(toComposer(built.payload)).outcomes;
     for (const a of built.angles!) {
@@ -112,6 +114,21 @@ describe("circuit templates", () => {
     const a = circuitTemplate("haar-1").build().angles![0];
     const b = circuitTemplate("haar-1").build().angles![0];
     expect(a).not.toEqual(b);
+  });
+
+  test("Open in composer: the link carries the exact Haar angles", () => {
+    const built = circuitTemplate("haar-2").build();
+    const href = composerHref("haar-2", built);
+    const q = new URL(href, "https://x").searchParams;
+    expect(href.startsWith("/composer?template=haar-2&angles=")).toBe(true);
+    const back = templateFromQuery(q.get("template")!, q.get("angles")!)!;
+    expect(back.template.id).toBe("haar-2");
+    expect(back.built.payload).toEqual(built.payload);
+
+    expect(composerHref("bell", circuitTemplate("bell").build())).toBe("/composer?template=bell");
+    expect(templateFromQuery("nope", undefined)).toBeNull();
+    // Unreadable angles: still loads, with new random ones.
+    expect(templateFromQuery("haar-1", "a,b,c")!.built.angles).toHaveLength(1);
   });
 
   test("circuits wider than the backend are hidden", () => {

@@ -15,18 +15,6 @@ import {
 
 export const HISTORY_LIMIT = 100;
 
-/** Ready-made circuits in the Templates menu. Each replaces the current circuit as one undo step. */
-export type CircuitTemplate = "bell" | "ghz";
-
-export const CIRCUIT_TEMPLATES: { id: CircuitTemplate; label: string; description: string }[] = [
-  { id: "bell", label: "Bell pair", description: "H on q[0], CNOT q[0] to q[1], then measure every qubit." },
-  { id: "ghz", label: "GHZ", description: "H on q[0], a CNOT chain across every qubit, then measure every qubit." },
-];
-
-function measureEvery(numQubits: number, column: number): PlacedGate[] {
-  return Array.from({ length: numQubits }, (_, q) => ({ id: newGateId(), name: "measure" as const, qubits: [q], column }));
-}
-
 export interface EditorState {
   past: Circuit[];
   present: Circuit;
@@ -41,7 +29,8 @@ export type EditorAction =
   | { type: "addQubit"; max: number }
   | { type: "removeQubit" }
   | { type: "measureAll" }
-  | { type: "template"; template: CircuitTemplate }
+  /** Replace the circuit with a ready-made one (the Templates menu; see lib/circuits/templates.ts), as one undo step. Built by the caller, so random angles stay out of the reducer. */
+  | { type: "template"; circuit: Circuit }
   | { type: "clear" }
   | { type: "undo" }
   | { type: "redo" };
@@ -136,26 +125,8 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
         gates: [...circuit.gates, ...missing.map((q) => ({ id: newGateId(), name: "measure" as const, qubits: [q], column }))],
       };
     }
-    case "template": {
-      if (action.template === "bell") {
-        // Needs two qubits; a one-qubit circuit grows to two.
-        const numQubits = Math.max(2, circuit.numQubits);
-        return {
-          numQubits,
-          gates: [
-            { id: newGateId(), name: "h", qubits: [0], column: 0 },
-            { id: newGateId(), name: "cx", qubits: [0, 1], column: 1 },
-            ...measureEvery(numQubits, 2),
-          ],
-        };
-      }
-      // GHZ on every qubit: H on q0, a CNOT chain q0 -> q1 -> ... -> q(n-1),
-      // then a measurement on each.
-      const n = circuit.numQubits;
-      const gates: PlacedGate[] = [{ id: newGateId(), name: "h", qubits: [0], column: 0 }];
-      for (let q = 1; q < n; q++) gates.push({ id: newGateId(), name: "cx", qubits: [q - 1, q], column: q });
-      return { ...circuit, gates: [...gates, ...measureEvery(n, n)] };
-    }
+    case "template":
+      return action.circuit.numQubits >= MIN_QUBITS ? action.circuit : circuit;
     case "clear":
       return circuit.gates.length === 0 ? circuit : { ...circuit, gates: [] };
     default:

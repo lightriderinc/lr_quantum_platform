@@ -3,7 +3,9 @@ import {
   circuitStats,
   DEFAULT_MAX_QUBITS,
   formatAngle,
+  fromLrCircuit,
   gatesAfterMeasure,
+  isOccupied,
   maxQubitsFor,
   parseAngle,
   runBlockers,
@@ -13,6 +15,13 @@ import {
   type GateName,
   type PlacedGate,
 } from "./circuit";
+import {
+  CIRCUIT_TEMPLATES,
+  circuitTemplate,
+  ghzPayload,
+  type CircuitTemplate,
+  type CircuitTemplateId,
+} from "@/lib/circuits/templates";
 import { applyEdit, editorReducer, initialEditorState, type EditorState } from "./editor";
 import {
   chartAxisMax,
@@ -367,48 +376,61 @@ describe("editor", () => {
     expect(applyEdit(c, { type: "addQubit", max: maxQubitsFor(null) })).toBe(c);
   });
 
-  test("Bell pair template: H, CNOT, measure every qubit; grows a 1-qubit circuit to 2", () => {
-    let s = initialEditorState({ numQubits: 3, gates: [] });
+  test("templates load from the shared list as one undo step", () => {
+    const load = (id: CircuitTemplateId, options?: Parameters<CircuitTemplate["build"]>[0]) =>
+      fromLrCircuit(circuitTemplate(id).build(options).payload, () => `t${n++}`);
+
+    let s = initialEditorState({ numQubits: 5, gates: [] });
     s = editorReducer(s, { type: "place", name: "x", qubits: [2], column: 4 });
-    s = editorReducer(s, { type: "template", template: "bell" });
+    s = editorReducer(s, { type: "template", circuit: load("ghz") });
+    expect(s.present.numQubits).toBe(3);
     expect(toLrCircuit(s.present).instructions).toEqual([
       { name: "h", qubits: [0] },
       { name: "cx", qubits: [0, 1] },
+      { name: "cx", qubits: [1, 2] },
       { name: "measure", qubits: [0], clbits: [0] },
       { name: "measure", qubits: [1], clbits: [1] },
       { name: "measure", qubits: [2], clbits: [2] },
     ]);
+    expect(probs(s.present)).toEqual({ "000": 0.5, "111": 0.5 });
     s = editorReducer(s, { type: "undo" });
+    expect(s.present.numQubits).toBe(5);
     expect(s.present.gates.map((x) => x.name)).toEqual(["x"]);
-    expect(applyEdit({ numQubits: 1, gates: [] }, { type: "template", template: "bell" }).numQubits).toBe(2);
+
+    // Every shared template lays out with nothing overlapping and measurements last.
+    for (const t of CIRCUIT_TEMPLATES) {
+      const c = load(t.id);
+      expect(c.numQubits).toBe(t.numQubits);
+      expect(gatesAfterMeasure(c)).toEqual([]);
+      for (const gate of c.gates) expect(isOccupied({ ...c, gates: c.gates.filter((x) => x !== gate) }, gate.column, gate)).toBe(false);
+    }
+
+    // Grover and Bernstein-Vazirani give their answers in the composer too.
+    expect(probs(load("grover-2"))["11"]).toBeCloseTo(1, 10);
+    expect(Object.keys(probs(load("bv-101")))).toEqual(["0101"]);
   });
 
-  test("GHZ: H on q0, CNOT chain, measure all; replaces the circuit in one undo step", () => {
-    let s = initialEditorState({ numQubits: 4, gates: [] });
-    s = editorReducer(s, { type: "place", name: "x", qubits: [2], column: 5 });
-    s = editorReducer(s, { type: "template", template: "ghz" });
-    const prog = toLrCircuit(s.present).instructions;
-    expect(prog).toEqual([
-      { name: "h", qubits: [0] },
-      { name: "cx", qubits: [0, 1] },
-      { name: "cx", qubits: [1, 2] },
-      { name: "cx", qubits: [2, 3] },
-      { name: "measure", qubits: [0], clbits: [0] },
-      { name: "measure", qubits: [1], clbits: [1] },
-      { name: "measure", qubits: [2], clbits: [2] },
-      { name: "measure", qubits: [3], clbits: [3] },
-    ]);
-    expect(probs(s.present)).toEqual({ "0000": 0.5, "1111": 0.5 });
-    s = editorReducer(s, { type: "undo" });
-    expect(s.present.gates.map((x) => x.name)).toEqual(["x"]);
-
-    // Works past the preview limit too (no simulation needed), and on one qubit.
-    const big = applyEdit({ numQubits: 36, gates: [] }, { type: "template", template: "ghz" });
+  test("GHZ (all qubits): a CNOT chain across the current qubit count", () => {
+    const four = fromLrCircuit(ghzPayload(4), () => `t${n++}`);
+    expect(probs(four)).toEqual({ "0000": 0.5, "1111": 0.5 });
+    expect(circuitStats(four)).toEqual({ gates: 4, measurements: 4, depth: 5 });
+    // Past the preview limit too (no simulation needed), and on one qubit.
+    const big = fromLrCircuit(ghzPayload(36), () => `t${n++}`);
     expect(circuitStats(big)).toEqual({ gates: 36, measurements: 36, depth: 37 });
     expect(toQasm3(big)).toContain("cx q[34], q[35];");
-    expect(toLrCircuit(applyEdit({ numQubits: 1, gates: [] }, { type: "template", template: "ghz" })).instructions).toEqual([
+    expect(toLrCircuit(fromLrCircuit(ghzPayload(1), () => `t${n++}`)).instructions).toEqual([
       { name: "h", qubits: [0] },
       { name: "measure", qubits: [0], clbits: [0] },
+    ]);
+  });
+
+  test("Haar templates keep the angles they were given", () => {
+    const angles = [{ qubit: 0, theta: 1.1, phi: 2.2, lambda: 3.3 }];
+    const c = fromLrCircuit(circuitTemplate("haar-1").build({ angles }).payload, () => `t${n++}`);
+    expect(c.gates.filter((x) => x.name !== "measure").map((x) => [x.name, x.params])).toEqual([
+      ["rz", [3.3]],
+      ["ry", [1.1]],
+      ["rz", [2.2]],
     ]);
   });
 

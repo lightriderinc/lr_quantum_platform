@@ -1,6 +1,8 @@
 "use client";
 
 import type { BuiltCircuit, CircuitTemplate } from "@/lib/circuits/templates";
+import Link from "next/link";
+import { MdArrowForward, MdRefresh } from "react-icons/md";
 import type { QuantumCircuitInstruction, QuantumCircuitPayload } from "@/lib/quantum/client";
 
 /** The two hand-drawn circuits the classroom uses. The submit popup draws any template with TemplateSchematic. */
@@ -106,10 +108,16 @@ export default function CircuitSchematic({
 export function TemplateSchematic({
   template,
   built,
+  onNewAngles,
+  composerHref,
   className = "",
 }: {
   template: CircuitTemplate;
   built: BuiltCircuit;
+  /** Redraws the Haar random angles in place; the button shows only for circuits that have angles. */
+  onNewAngles?: () => void;
+  /** Link to /composer with this exact circuit loaded. */
+  composerHref?: string;
   className?: string;
 }) {
   return (
@@ -130,8 +138,22 @@ export function TemplateSchematic({
                 {a.lambda.toFixed(2)}
               </p>
             ))}
-            <p className="font-sans">Angles in radians. New ones each time you pick this circuit.</p>
+            <p className="font-sans">Angles in radians.</p>
+            {onNewAngles && (
+              <button
+                type="button"
+                onClick={onNewAngles}
+                className="mt-1.5 inline-flex cursor-pointer items-center gap-1 default-radius border border-gray-300 bg-white px-2.5 py-1 font-sans text-xs font-medium text-gray-700 transition-colors hover:border-gray-400"
+              >
+                <MdRefresh /> New angles
+              </button>
+            )}
           </div>
+        )}
+        {composerHref && (
+          <Link href={composerHref} className="brand-link mt-3 inline-flex items-center gap-1 text-xs font-medium">
+            Open in composer <MdArrowForward />
+          </Link>
         )}
       </div>
     </div>

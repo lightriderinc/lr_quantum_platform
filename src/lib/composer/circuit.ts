@@ -332,3 +332,38 @@ export function parseAngle(input: string): number | null {
   const value = expr();
   return value !== null && i === src.length && Number.isFinite(value) ? value : null;
 }
+
+/**
+ * An lr-circuit/v1 circuit (e.g. a shared template from
+ * lib/circuits/templates.ts) laid out on the grid: each gate in the first
+ * column free on every row it spans, all measurements in one final column.
+ * Measurements land on the classical bit of the same number, as the grid
+ * always does. `newId` names each gate; pass fixed ids for a server render.
+ */
+export function fromLrCircuit(
+  payload: { num_qubits: number; instructions: { name: string; qubits: number[]; params?: number[] }[] },
+  newId: () => string,
+): Circuit {
+  const n = payload.num_qubits;
+  const nextFree = new Array<number>(n).fill(0);
+  const gates: PlacedGate[] = [];
+  const measured: number[] = [];
+  for (const inst of payload.instructions) {
+    if (!GATE_BY_NAME.has(inst.name as GateName)) throw new Error(`The composer has no ${inst.name} gate.`);
+    const name = inst.name as GateName;
+    if (name === "measure") {
+      measured.push(inst.qubits[0]);
+      continue;
+    }
+    const [lo, hi] = gateSpan({ name, qubits: inst.qubits }, n);
+    let column = 0;
+    for (let q = lo; q <= hi; q++) column = Math.max(column, nextFree[q]);
+    for (let q = lo; q <= hi; q++) nextFree[q] = column + 1;
+    const gate: PlacedGate = { id: newId(), name, qubits: name === "barrier" ? Array.from({ length: n }, (_, i) => i) : inst.qubits, column };
+    if (inst.params?.length) gate.params = [...inst.params];
+    gates.push(gate);
+  }
+  const last = Math.max(0, ...nextFree);
+  for (const q of measured) gates.push({ id: newId(), name: "measure", qubits: [q], column: last });
+  return { numQubits: n, gates };
+}
