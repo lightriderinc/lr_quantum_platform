@@ -77,7 +77,7 @@ const readOriginOnServer = () => "https://platform.lightriderinc.com";
  * 401 that looks like a bad key. Same trap the notebooks now avoid with their
  * environment selector.
  */
-function pythonSnippet(backendId: string, baseUrl: string): string {
+function snippetSetup(baseUrl: string): string {
   return `%pip install -q uv
 !uv pip install -q --system lightrider==1.5.2 requests
 import requests
@@ -93,7 +93,44 @@ circuit = Circuit(2, name="bell")
 circuit.h(0)
 circuit.cx(0, 1)
 circuit.measure_all()
+`;
+}
 
+/**
+ * Per-job priced backends (IonQ Forte): the same two steps as their Colab
+ * notebooks. Get the price from /estimate (charges nothing), then submit
+ * with confirmedPriceCredits; the submit route refuses a job without it.
+ */
+function pricedSnippet(backendId: string, baseUrl: string): string {
+  return `${snippetSetup(baseUrl)}
+backend = "${backendId}"
+shots = 1000
+body = {"backend": backend, "circuit": circuit.to_payload(), "shots": shots}
+
+# 1. Get the price in credits. Nothing is charged here.
+estimate = session.post(f"{base_url}/api/lr/quantum/estimate", json=body)
+if not estimate.ok:
+    detail = estimate.json()
+    raise RuntimeError(f"{detail.get('error')}: {detail.get('message', '')}")
+price_credits = estimate.json()["priceCredits"]
+print(f"Price for this job: {price_credits:,} credits")
+
+# 2. Submit with that price confirmed. This charges it and runs the job.
+response = session.post(
+    f"{base_url}/api/lr/quantum/submit",
+    json={**body, "confirmedPriceCredits": price_credits},
+)
+if not response.ok:
+    detail = response.json()
+    raise RuntimeError(f"{detail.get('error')}: {detail.get('message', '')}")
+job = response.json()
+print("Job submitted:", job["job_uuid"])
+print("Charged:", job["priceCredits"], "credits")
+`;
+}
+
+function pythonSnippet(backendId: string, baseUrl: string): string {
+  return `${snippetSetup(baseUrl)}
 response = session.post(
     f"{base_url}/api/lr/quantum/submit",
     json={"backend": "${backendId}", "circuit": circuit.to_payload(), "shots": 1000},
@@ -215,11 +252,11 @@ export default function BackendConnectSection({
     return <BackendConnectSectionSkeleton />;
   }
 
-  // Per-job priced backends (IonQ Forte) need a price confirmation to run,
-  // so the copyable example targets the free IonQ simulator instead; the
-  // note below says how to run the same circuit on Forte.
-  const pricedPerJob = isPricedPerJob(quantumBackendId);
-  const snippet = pythonSnippet(pricedPerJob ? "ionq-simulator" : quantumBackendId, snippetBaseUrl);
+  // Every card's example targets its own backend. Per-job priced backends
+  // (IonQ Forte) get the price first and submit with it confirmed.
+  const snippet = isPricedPerJob(quantumBackendId)
+    ? pricedSnippet(quantumBackendId, snippetBaseUrl)
+    : pythonSnippet(quantumBackendId, snippetBaseUrl);
 
   async function handleCopy() {
     try {
@@ -236,13 +273,6 @@ export default function BackendConnectSection({
       <p className="text-sm text-gray-600">
         Submit jobs to this backend using your Light Rider API key.
       </p>
-      {pricedPerJob && (
-        <InfoBox>
-          This example runs on the free IonQ simulator. To run on {backend.name}, get the price first
-          from <code>/api/lr/quantum/estimate</code> (same body), then submit
-          with <code>backend: &quot;{quantumBackendId}&quot;</code> and <code>confirmedPriceCredits</code> set to that price.
-        </InfoBox>
-      )}
       {isReservedOnlyBackend && (
         <InfoBox>
           Submitting jobs to Rigetti Cepheus 1-108Q is only possible in reserved
