@@ -38,6 +38,12 @@ const COLAB_NOTEBOOK_BY_BACKEND: Record<string, string> = {
   "iqm-sirius": "quantum-quickstart-iqm-sirius.ipynb",
   "rigetti-cepheus-mock": "quantum-quickstart-rigetti-mock.ipynb",
   "rigetti-cepheus": "quantum-quickstart-rigetti-cepheus.ipynb",
+  // IonQ: one notebook each. The Forte QPU notebooks get the price from
+  // /api/lr/quantum/estimate and submit with confirmedPriceCredits.
+  "ionq-simulator": "quantum-quickstart-ionq-simulator.ipynb",
+  "ionq-forte-1-simulator": "quantum-quickstart-ionq-forte-1-simulator.ipynb",
+  "ionq-forte-1": "quantum-quickstart-ionq-forte-1.ipynb",
+  "ionq-forte-enterprise-1": "quantum-quickstart-ionq-forte-enterprise-1.ipynb",
 };
 
 function colabUrl(backendId: string | null): string {
