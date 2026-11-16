@@ -19,14 +19,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { MdArrowLeft } from "react-icons/md";
 
-/** ionq:mock: free, ideal, and the default. The composer never preselects a QPU. */
-export const DEFAULT_COMPOSER_BACKEND = "ionq.ionq:mock";
-
 // Run panel: pick a backend (QPUs / Simulators, as on the Backends page, with
 // live status), set shots, and submit through the same flow as every other
 // submit (useJobSubmission: credit gate, Forte "Get price" then confirm,
-// server-side canUseIonqQpu). Nothing is ever sent without a click on the
-// submit button.
+// server-side canUseIonqQpu). No backend is chosen to start with, so nothing
+// can be sent until the user picks one and clicks the submit button.
 export default function RunPanel({
   payload,
   isAuthenticated,
@@ -47,12 +44,14 @@ export default function RunPanel({
   const runnable = [...iqm, ...rigetti, ...ionq].filter((b) => getQuantumBackendId(b.id) !== null);
   const counts = countByTab(runnable);
 
-  const [tab, setTab] = useState<BackendTab>("simulators");
-  const [selectedId, setSelectedId] = useState(DEFAULT_COMPOSER_BACKEND);
+  const [tab, setTab] = useState<BackendTab>("qpus");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shots, setShots] = useState(1000);
 
   const selected = runnable.find((b) => b.id === selectedId) ?? null;
-  const quantumId = getQuantumBackendId(selectedId) ?? "ionq-simulator";
+  // The hook needs some backend id; with nothing chosen it gets the free
+  // ionq:mock as a placeholder, and the form below can't submit anyway.
+  const quantumId = (selectedId && getQuantumBackendId(selectedId)) || "ionq-simulator";
   const submission = useJobSubmission({ backend: quantumId, circuit: payload, shots, gate: "composer" });
   const reasons = selected ? blockers(selected) : [];
   const needsMeasure = payload.instructions.length > 0 && !payload.instructions.some((i) => i.name === "measure");
@@ -163,7 +162,7 @@ export default function RunPanel({
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (reasons.length === 0) submission.submit();
+            if (selected && reasons.length === 0) submission.submit();
           }}
         >
           <ShotsInput value={shots} onChange={setShots} />
@@ -193,6 +192,11 @@ export default function RunPanel({
           >
             {submission.submitLabel}
           </LRButton>
+          {!selected && (
+            <p className="text-center text-xs text-gray-500" data-composer-choose-backend>
+              Choose a backend to run
+            </p>
+          )}
         </form>
       )}
     </Panel>

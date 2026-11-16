@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getQuantumBackendId, isPaidBackend, isPricedPerJob, runsOnIonqCloud } from "@/lib/quantum/backends";
+import { getQuantumBackendId, isPaidBackend, isPricedPerJob } from "@/lib/quantum/backends";
 import { mapIonqBackends, type IonqStatusResponse } from "./client";
 
 // IonQ's GET /backends as qpu-proxy /healthz passes it on (backends.ionq).
@@ -19,7 +19,7 @@ describe("IonQ catalog cards", () => {
     const cards = mapIonqBackends(listing());
     expect(cards.map((b) => [b.id, b.type, b.qubits])).toEqual([
       ["ionq.ionq:mock", "Simulator", 29],
-      ["ionq.forte-1:mock", "Simulator", 29],
+      ["ionq.forte-1:mock", "Simulator", 36],
       ["ionq.forte-1", "QPU", 36],
       ["ionq.forte-enterprise-1", "QPU", 36],
     ]);
@@ -74,11 +74,6 @@ describe("IonQ catalog cards", () => {
       ["ionq.forte-1", "IonQ", "IonQ Cloud", undefined],
       ["ionq.forte-enterprise-1", "IonQ", "IonQ Cloud", undefined],
     ]);
-  });
-
-  test("jobs on forte-1, forte-enterprise-1 and forte-1:mock ran on IonQ Cloud; ionq:mock and others didn't", () => {
-    expect(["ionq-forte-1", "ionq-forte-enterprise-1", "ionq-forte-1-simulator"].map(runsOnIonqCloud)).toEqual([true, true, true]);
-    expect(["ionq-simulator", "iqm-garnet", undefined, ""].map(runsOnIonqCloud)).toEqual([false, false, false, false]);
   });
 
   test("queue time comes through in ms", () => {

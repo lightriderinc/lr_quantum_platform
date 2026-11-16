@@ -1,8 +1,22 @@
 import { isPaidBackend, isValidBackend } from "@/lib/quantum/backends";
 
-/** "Mock run" for free/unlimited :mock backends, "Live" for real (credit-metered) hardware. */
-function resolveMode(backend?: string): "Mock run" | "Live" | null {
+type Mode = "Mock run" | "Live" | "IonQ Cloud" | "Simulator";
+
+// IonQ jobs say where they ran: the Forte QPUs and the Forte noise simulator
+// run on IonQ Cloud; ionq:mock is IonQ's ideal simulator. IQM and Rigetti
+// keep "Mock run" / "Live".
+const IONQ_MODES: Partial<Record<string, Mode>> = {
+  "ionq-simulator": "Simulator",
+  "ionq-forte-1-simulator": "IonQ Cloud",
+  "ionq-forte-1": "IonQ Cloud",
+  "ionq-forte-enterprise-1": "IonQ Cloud",
+};
+
+/** "Mock run" for free/unlimited :mock backends, "Live" for real (credit-metered) hardware, IonQ as above. */
+export function resolveMode(backend?: string): Mode | null {
   if (!backend || !isValidBackend(backend)) return null;
+  const ionq = IONQ_MODES[backend];
+  if (ionq) return ionq;
   // isPaidBackend, not costPerShotCents === 0: per-job priced IonQ Forte QPUs
   // have costPerShotCents 0 but are real hardware.
   return isPaidBackend(backend) ? "Live" : "Mock run";

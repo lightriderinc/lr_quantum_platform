@@ -39,7 +39,7 @@ const IONQ_DEVICES: IonqDevice[] = [
     ionqBackend: "simulator",
     name: "IonQ Forte-1 (simulator)",
     type: "Simulator",
-    qubits: 29,
+    qubits: 36, // as qpu-proxy reports forte-1:mock; only the ideal ionq:mock is 29
     description: "Simulator with the noise model of IonQ Forte.",
     ionqCloud: true,
     noiseModel: "Forte",
