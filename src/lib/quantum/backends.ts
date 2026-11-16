@@ -12,6 +12,8 @@
 interface QuantumBackendConfig {
   proxyPath: "/jobs";
   deviceInstance: string;
+  /** Most qubits a circuit may use: qpu-proxy's own limit for the device (registry.py max_qubits). */
+  maxQubits: number;
   /** Flat per-shot price in credits (1 credit = 1 cent). 0 for free simulators. */
   costPerShotCents: number;
   /**
@@ -27,41 +29,49 @@ export const QUANTUM_BACKENDS = {
   "iqm-garnet-mock": {
     proxyPath: "/jobs",
     deviceInstance: "garnet:mock",
+    maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-garnet": {
     proxyPath: "/jobs",
     deviceInstance: "garnet",
+    maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "iqm-emerald-mock": {
     proxyPath: "/jobs",
     deviceInstance: "emerald:mock",
+    maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-emerald": {
     proxyPath: "/jobs",
     deviceInstance: "emerald",
+    maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "iqm-sirius-mock": {
     proxyPath: "/jobs",
     deviceInstance: "sirius:mock",
+    maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-sirius": {
     proxyPath: "/jobs",
     deviceInstance: "sirius",
+    maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "rigetti-cepheus-mock": {
     proxyPath: "/jobs",
     deviceInstance: "rigetti:mock",
+    maxQubits: 108,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "rigetti-cepheus": {
     proxyPath: "/jobs",
     deviceInstance: "Cepheus-1-108Q",
+    maxQubits: 108,
     // PLACEHOLDER: reuses the IQM real-hardware rate ($0.002/shot) as a
     // stand-in. Rigetti/QCS bills by QPU-time (per-second), not per-shot —
     // this needs replacing with real per-second pricing once qpu-proxy
@@ -74,22 +84,26 @@ export const QUANTUM_BACKENDS = {
   "ionq-simulator": {
     proxyPath: "/jobs",
     deviceInstance: "ionq:mock",
+    maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator, ideal (noiseless)
   },
   "ionq-forte-1-simulator": {
     proxyPath: "/jobs",
     deviceInstance: "forte-1:mock",
+    maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator with the Forte-1 noise model
   },
   "ionq-forte-1": {
     proxyPath: "/jobs",
     deviceInstance: "forte-1",
+    maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
   },
   "ionq-forte-enterprise-1": {
     proxyPath: "/jobs",
     deviceInstance: "forte-enterprise-1",
+    maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
   },

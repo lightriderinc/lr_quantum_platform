@@ -2,26 +2,30 @@
 
 import CreditsSummary from "@/components/billing/CreditsSummary";
 import JobResultView from "@/components/jobs/JobResultView";
-import CircuitSchematic, {
-  type CircuitType,
-} from "@/components/quantum/CircuitSchematic";
+import { TemplateSchematic } from "@/components/quantum/CircuitSchematic";
 import JobSubmitControls from "@/components/quantum/JobSubmitControls";
 import ShotsInput from "@/components/quantum/ShotsInput";
 import LRButton from "@/components/ui/LRButton";
 import { useJobSubmission } from "@/hooks/useJobSubmission";
-import type { QuantumBackendId } from "@/lib/quantum/backends";
-import { CIRCUIT_PAYLOADS } from "@/lib/quantum/client";
+import {
+  CIRCUIT_SECTIONS,
+  circuitTemplate,
+  templatesForQubits,
+  type BuiltCircuit,
+  type CircuitTemplateId,
+} from "@/lib/circuits/templates";
+import { QUANTUM_BACKENDS, type QuantumBackendId } from "@/lib/quantum/backends";
 import { useEffect, useState } from "react";
 import { MdArrowLeft, MdClose } from "react-icons/md";
 
-const CIRCUITS: { value: CircuitType; label: string; description: string }[] = [
-  { value: "h", label: "H gate", description: "1-qubit superposition" },
-  { value: "bell", label: "Bell state", description: "2-qubit entangled pair" },
-];
+interface Selection {
+  id: CircuitTemplateId;
+  built: BuiltCircuit;
+}
 
-function toCircuitType(gate: string | undefined): CircuitType | null {
-  if (gate === "h" || gate === "bell") return gate;
-  return null;
+/** Builds the template afresh, so random circuits get new angles each time they're picked. */
+function select(id: CircuitTemplateId): Selection {
+  return { id, built: circuitTemplate(id).build() };
 }
 
 /**
@@ -47,18 +51,22 @@ export default function BackendSubmitModal({
 }: {
   backend: QuantumBackendId;
   title?: string;
-  initialCircuit?: CircuitType;
+  initialCircuit?: CircuitTemplateId;
   /** Extra content shown above the result once the job has been submitted — e.g. course-specific next steps. */
   successMessage?: React.ReactNode;
   onClose: () => void;
 }) {
-  const [circuit, setCircuit] = useState<CircuitType>(initialCircuit);
+  // Only circuits that fit on this backend.
+  const templates = templatesForQubits(QUANTUM_BACKENDS[backend].maxQubits);
+  const [selection, setSelection] = useState<Selection>(() =>
+    select(templates.some((t) => t.id === initialCircuit) ? initialCircuit : templates[0].id),
+  );
   const [shots, setShots] = useState(1000);
   const submission = useJobSubmission({
     backend,
-    circuit: CIRCUIT_PAYLOADS[circuit],
+    circuit: selection.built.payload,
     shots,
-    gate: circuit,
+    gate: selection.id,
   });
   const { blockedByCredits, stillCheckingCredits, submittedJob, displayedJob } = submission;
 
@@ -74,9 +82,6 @@ export default function BackendSubmitModal({
     e.preventDefault();
     submission.submit();
   }
-
-  const activeCircuit: CircuitType =
-    (submittedJob && toCircuitType(submittedJob.gate)) ?? circuit;
 
   return (
     <div
@@ -142,19 +147,28 @@ export default function BackendSubmitModal({
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    <label htmlFor="submit-circuit" className="mb-1.5 block text-sm font-medium text-gray-700">
                       Circuit
                     </label>
                     <select
-                      value={circuit}
-                      onChange={(e) => setCircuit(e.target.value as CircuitType)}
+                      id="submit-circuit"
+                      value={selection.id}
+                      onChange={(e) => setSelection(select(e.target.value as CircuitTemplateId))}
                       className="default-radius w-full border border-gray-100 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-300"
                     >
-                      {CIRCUITS.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.label} — {c.description}
-                        </option>
-                      ))}
+                      {CIRCUIT_SECTIONS.map((section) => {
+                        const inSection = templates.filter((t) => t.section === section);
+                        if (inSection.length === 0) return null;
+                        return (
+                          <optgroup key={section} label={section}>
+                            {inSection.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}: {t.description}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -181,7 +195,7 @@ export default function BackendSubmitModal({
             {/* Right: circuit schematic (persists across both views, hidden when blocked by credits) */}
             {!blockedByCredits && (
               <div>
-                <CircuitSchematic circuit={activeCircuit} />
+                <TemplateSchematic template={circuitTemplate(selection.id)} built={selection.built} />
               </div>
             )}
           </div>

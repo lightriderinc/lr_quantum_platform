@@ -22,32 +22,8 @@ export interface QuantumCircuitPayload {
   instructions: QuantumCircuitInstruction[];
 }
 
-/**
- * /api/lr/quantum/submit expects a full circuit object, not a gate shorthand
- * — unlike the old /api/lr/jobs, which accepted {gate, shots} directly and
- * resolved the preset server-side. These mirror the exact shapes already
- * verified against the real API in docs/notebooks/quantum-quickstart.ipynb,
- * matching the same "h"/"bell" preset names DemoCircuitModal/NewJobModal
- * already exposed before this migration.
- */
-export const CIRCUIT_PAYLOADS: Record<"h" | "bell", QuantumCircuitPayload> = {
-  h: {
-    num_qubits: 1,
-    instructions: [
-      { name: "h", qubits: [0] },
-      { name: "measure", qubits: [0], clbits: [0] },
-    ],
-  },
-  bell: {
-    num_qubits: 2,
-    instructions: [
-      { name: "h", qubits: [0] },
-      { name: "cx", qubits: [0, 1] },
-      { name: "measure", qubits: [0], clbits: [0] },
-      { name: "measure", qubits: [1], clbits: [1] },
-    ],
-  },
-};
+// Ready-made circuits (the old "h"/"bell" presets among them) live in
+// lib/circuits/templates.ts.
 
 async function parseErrorMessage(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}));
