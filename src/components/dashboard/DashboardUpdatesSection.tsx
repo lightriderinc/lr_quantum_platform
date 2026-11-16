@@ -1,5 +1,44 @@
 import DashboardUpdateCard from "./DashboardUpdateCard";
 
+type Update = Parameters<typeof DashboardUpdateCard>[0];
+
+/** Newest first. Only the newest MAX_UPDATES are shown. */
+const UPDATES: Update[] = [
+  {
+    href: "/backends",
+    color: "indigo",
+    date: "2026-11-16",
+    title: "IonQ Forte now available",
+    description:
+      "Run circuits on IonQ's trapped-ion Forte quantum computers and the Forte noisy simulator, with live status, calibration data and per-job pricing.",
+  },
+  {
+    href: "/composer",
+    color: "fuchsia",
+    date: "2026-11-16",
+    title: "New circuit composer",
+    description:
+      "Build circuits by dragging gates, preview outcomes instantly, and run them on any backend. Start from a Bell pair or GHZ template.",
+  },
+  {
+    href: "/backends/rigetti-cepheus-1-108q?tab=experiments",
+    color: "lime",
+    date: "2026-09-15",
+    title: "Experiments available on Cepheus-1-108Q",
+    description:
+      "Experiments are specific use-cases designed to help you explore the unique capabilities of the device and understand how to best utilize it for your applications.",
+  },
+  {
+    href: "/backends/rigetti-cepheus-1-108q",
+    color: "purple",
+    date: "2026-08-27",
+    title: "Rigetti Cepheus-1-108Q Live",
+    description: "Rigetti's 108-qubit quantum processor is now available for access from the platform and SDK.",
+  },
+];
+
+const MAX_UPDATES = 3;
+
 export default function DashboardUpdatesSection() {
   return (
     <div className="border-2 border-gray-50 p-4 mb-8">
@@ -7,22 +46,10 @@ export default function DashboardUpdatesSection() {
         Platform updates
         {/* <FaStarOfLife className="text-sm text-gray-200" /> */}
       </h2>
-      {/* There should'nt be more than 2 updates at a time */}
       <div className="flex flex-col gap-2">
-        <DashboardUpdateCard
-          href="/backends/rigetti-cepheus-1-108q?tab=experiments"
-          color="lime"
-          date="2026-09-15"
-          title="Experiments available on Cepheus-1-108Q"
-          description="Experiments are specific use-cases designed to help you explore the unique capabilities of the device and understand how to best utilize it for your applications."
-        />
-        <DashboardUpdateCard
-          href="/backends/rigetti-cepheus-1-108q"
-          color="purple"
-          date="2026-08-27"
-          title="Rigetti Cepheus-1-108Q Live"
-          description="Rigetti's 108-qubit quantum processor is now available for access from the platform and SDK."
-        />
+        {UPDATES.slice(0, MAX_UPDATES).map((u) => (
+          <DashboardUpdateCard key={u.title} {...u} />
+        ))}
       </div>
     </div>
   );
