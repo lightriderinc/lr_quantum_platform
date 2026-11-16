@@ -1,14 +1,24 @@
 import { QUANTUM_BACKENDS, type QuantumBackendId } from "@/lib/quantum/backends";
 import type { JobDetail, JobStatus, MeasurementCounts } from "@/types/job";
 
-interface QuantumCircuitInstruction {
+export interface QuantumCircuitInstruction {
   name: string;
   qubits: number[];
   clbits?: number[];
+  /** Angles in radians (RX, RY, RZ). */
+  params?: number[];
 }
 
-interface QuantumCircuitPayload {
+/**
+ * The circuit /api/lr/quantum/submit forwards to qpu-proxy: lr-circuit/v1,
+ * the Light Rider SDK's payload. The presets below send only the required
+ * fields; the composer sends the full form (format, name, num_clbits).
+ */
+export interface QuantumCircuitPayload {
+  format?: "lr-circuit/v1";
+  name?: string;
   num_qubits: number;
+  num_clbits?: number;
   instructions: QuantumCircuitInstruction[];
 }
 

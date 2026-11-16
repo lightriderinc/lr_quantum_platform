@@ -1,0 +1,320 @@
+// Circuit model for the /composer page: the gates a user has placed on the
+// grid, and everything derived from them (the lr-circuit/v1 payload that
+// /api/lr/quantum/submit forwards to qpu-proxy, OpenQASM 3, counts, depth,
+// backend warnings). Pure functions only, so all of it is unit tested.
+//
+// lr-circuit/v1 is the Light Rider SDK's payload (lightrider/circuit.py):
+// { format, name, num_qubits, num_clbits, instructions: [{ name, qubits,
+// params?, clbits? }] }, angles in radians, gate names as in its GATE_SET.
+// Every gate in the palette below is one qpu-proxy's IonQ adapter emits
+// verbatim (its _NATIVE set), and a qiskit method for IQM.
+
+export const MAX_QUBITS = 12;
+export const MIN_QUBITS = 1;
+
+export type GateName =
+  | "h" | "x" | "y" | "z" | "s" | "t" | "sdg" | "tdg" | "sx"
+  | "rx" | "ry" | "rz"
+  | "cx" | "cz" | "swap"
+  | "measure" | "barrier";
+
+export interface GateDef {
+  name: GateName;
+  /** Text on the palette button and on the placed gate. */
+  label: string;
+  /** Tooltip. */
+  title: string;
+  /** Number of qubits the user picks: 1, 2, or 0 for the barrier (always every qubit). */
+  arity: 0 | 1 | 2;
+  /** Takes one angle (RX, RY, RZ). */
+  angle?: true;
+  group: "single" | "rotation" | "multi" | "other";
+}
+
+export const GATES: GateDef[] = [
+  { name: "h", label: "H", title: "Hadamard", arity: 1, group: "single" },
+  { name: "x", label: "X", title: "Pauli X (NOT)", arity: 1, group: "single" },
+  { name: "y", label: "Y", title: "Pauli Y", arity: 1, group: "single" },
+  { name: "z", label: "Z", title: "Pauli Z", arity: 1, group: "single" },
+  { name: "s", label: "S", title: "S (phase of pi/2)", arity: 1, group: "single" },
+  { name: "t", label: "T", title: "T (phase of pi/4)", arity: 1, group: "single" },
+  { name: "sdg", label: "S†", title: "S dagger (inverse of S)", arity: 1, group: "single" },
+  { name: "tdg", label: "T†", title: "T dagger (inverse of T)", arity: 1, group: "single" },
+  { name: "sx", label: "√X", title: "Square root of X", arity: 1, group: "single" },
+  { name: "rx", label: "RX", title: "Rotation about X", arity: 1, angle: true, group: "rotation" },
+  { name: "ry", label: "RY", title: "Rotation about Y", arity: 1, angle: true, group: "rotation" },
+  { name: "rz", label: "RZ", title: "Rotation about Z", arity: 1, angle: true, group: "rotation" },
+  { name: "cx", label: "CNOT", title: "Controlled NOT: pick the control qubit, then the target", arity: 2, group: "multi" },
+  { name: "cz", label: "CZ", title: "Controlled Z: pick two qubits", arity: 2, group: "multi" },
+  { name: "swap", label: "SWAP", title: "Swap two qubits", arity: 2, group: "multi" },
+  { name: "measure", label: "M", title: "Measure into the classical bit with the same number", arity: 1, group: "other" },
+  { name: "barrier", label: "Barrier", title: "Barrier across every qubit", arity: 0, group: "other" },
+];
+
+const GATE_BY_NAME = new Map(GATES.map((g) => [g.name, g]));
+
+export function gateDef(name: GateName): GateDef {
+  return GATE_BY_NAME.get(name)!;
+}
+
+/** One gate on the grid. `qubits` is in gate order (control first for CNOT). */
+export interface PlacedGate {
+  id: string;
+  name: GateName;
+  qubits: number[];
+  /** Angles in radians, for RX, RY, RZ. */
+  params?: number[];
+  column: number;
+}
+
+export interface Circuit {
+  numQubits: number;
+  gates: PlacedGate[];
+}
+
+export const EMPTY_CIRCUIT: Circuit = { numQubits: 2, gates: [] };
+
+/** Rows a gate covers in its column: its qubit span, or every row for a barrier. */
+export function gateSpan(gate: Pick<PlacedGate, "name" | "qubits">, numQubits: number): [number, number] {
+  if (gate.name === "barrier") return [0, numQubits - 1];
+  return [Math.min(...gate.qubits), Math.max(...gate.qubits)];
+}
+
+/** True when a gate on `qubits` in `column` would overlap a gate already there (other than `ignoreId`). */
+export function isOccupied(
+  circuit: Circuit,
+  column: number,
+  candidate: Pick<PlacedGate, "name" | "qubits">,
+  ignoreId?: string,
+): boolean {
+  const [lo, hi] = gateSpan(candidate, circuit.numQubits);
+  return circuit.gates.some((g) => {
+    if (g.column !== column || g.id === ignoreId) return false;
+    const [glo, ghi] = gateSpan(g, circuit.numQubits);
+    return glo <= hi && lo <= ghi;
+  });
+}
+
+/** Gates in program order: by column, then top qubit. */
+export function orderedGates(circuit: Circuit): PlacedGate[] {
+  return [...circuit.gates].sort(
+    (a, b) => a.column - b.column || gateSpan(a, circuit.numQubits)[0] - gateSpan(b, circuit.numQubits)[0],
+  );
+}
+
+// --- lr-circuit/v1 --------------------------------------------------------
+
+export interface LrInstruction {
+  name: GateName;
+  qubits: number[];
+  params?: number[];
+  clbits?: number[];
+}
+
+export interface LrCircuitPayload {
+  format: "lr-circuit/v1";
+  name: string;
+  num_qubits: number;
+  num_clbits: number;
+  instructions: LrInstruction[];
+}
+
+/** The payload sent to /api/lr/quantum/submit. One classical bit per qubit; a measure on qubit q writes bit q. */
+export function toLrCircuit(circuit: Circuit, name = "composer"): LrCircuitPayload {
+  const all = Array.from({ length: circuit.numQubits }, (_, i) => i);
+  return {
+    format: "lr-circuit/v1",
+    name,
+    num_qubits: circuit.numQubits,
+    num_clbits: circuit.numQubits,
+    instructions: orderedGates(circuit).map((g): LrInstruction => {
+      if (g.name === "barrier") return { name: "barrier", qubits: all };
+      if (g.name === "measure") return { name: "measure", qubits: [g.qubits[0]], clbits: [g.qubits[0]] };
+      return g.params?.length ? { name: g.name, qubits: [...g.qubits], params: [...g.params] } : { name: g.name, qubits: [...g.qubits] };
+    }),
+  };
+}
+
+// --- OpenQASM 3 ----------------------------------------------------------
+
+/** An angle as text: a simple multiple of pi when it is one ("pi/2", "-3*pi/4"), otherwise a decimal. */
+export function formatAngle(radians: number): string {
+  if (!Number.isFinite(radians)) return "0";
+  if (Math.abs(radians) < 1e-12) return "0";
+  for (const den of [1, 2, 3, 4, 6, 8, 12, 16]) {
+    const num = (radians / Math.PI) * den;
+    const rounded = Math.round(num);
+    if (rounded !== 0 && Math.abs(num - rounded) < 1e-9) {
+      const sign = rounded < 0 ? "-" : "";
+      const n = Math.abs(rounded);
+      const head = n === 1 ? "pi" : `${n}*pi`;
+      return `${sign}${head}${den === 1 ? "" : `/${den}`}`;
+    }
+  }
+  return String(Number(radians.toPrecision(10)));
+}
+
+/** Read-only OpenQASM 3 for the circuit, using the standard gate library. */
+export function toQasm3(circuit: Circuit): string {
+  const payload = toLrCircuit(circuit);
+  const hasMeasure = payload.instructions.some((i) => i.name === "measure");
+  const q = (i: number) => `q[${i}]`;
+  const lines = ["OPENQASM 3.0;", 'include "stdgates.inc";', "", `qubit[${payload.num_qubits}] q;`];
+  if (hasMeasure) lines.push(`bit[${payload.num_clbits}] c;`);
+  if (payload.instructions.length > 0) lines.push("");
+  for (const inst of payload.instructions) {
+    if (inst.name === "measure") {
+      lines.push(`c[${inst.clbits![0]}] = measure ${q(inst.qubits[0])};`);
+    } else if (inst.name === "barrier") {
+      lines.push(`barrier ${inst.qubits.map(q).join(", ")};`);
+    } else {
+      const args = inst.params?.length ? `(${inst.params.map(formatAngle).join(", ")})` : "";
+      lines.push(`${inst.name}${args} ${inst.qubits.map(q).join(", ")};`);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
+// --- Stats and checks ----------------------------------------------------
+
+export interface CircuitStats {
+  /** Gates, not counting measurements or barriers. */
+  gates: number;
+  measurements: number;
+  /** Longest chain of operations on any qubit, measurements included, barriers not (as qiskit counts it). */
+  depth: number;
+}
+
+export function circuitStats(circuit: Circuit): CircuitStats {
+  const level = new Array<number>(circuit.numQubits).fill(0);
+  let gates = 0;
+  let measurements = 0;
+  for (const g of orderedGates(circuit)) {
+    if (g.name === "barrier") continue;
+    if (g.name === "measure") measurements++;
+    else gates++;
+    const next = Math.max(...g.qubits.map((q) => level[q] ?? 0)) + 1;
+    for (const q of g.qubits) level[q] = next;
+  }
+  return { gates, measurements, depth: Math.max(0, ...level) };
+}
+
+/**
+ * Qubits that have a gate after their measurement. IonQ rejects these (it
+ * measures every qubit once, at the end), and the in-browser preview treats
+ * every measurement as if it were at the end.
+ */
+export function gatesAfterMeasure(circuit: Circuit): number[] {
+  const measured = new Set<number>();
+  const bad = new Set<number>();
+  for (const g of orderedGates(circuit)) {
+    if (g.name === "barrier") continue;
+    if (g.name === "measure") {
+      measured.add(g.qubits[0]);
+      continue;
+    }
+    for (const q of g.qubits) if (measured.has(q)) bad.add(q);
+  }
+  return [...bad].sort((a, b) => a - b);
+}
+
+/**
+ * Why this circuit can't be sent to `backend` yet, in plain words; empty when
+ * it can. The server and qpu-proxy check again: this only saves a round trip
+ * and explains the fix.
+ */
+export function runBlockers(
+  circuit: Circuit,
+  backend: { name: string; qubits: number; provider: string },
+): string[] {
+  const reasons: string[] = [];
+  const stats = circuitStats(circuit);
+  if (stats.gates === 0 && stats.measurements === 0) reasons.push("Add at least one gate.");
+  if (stats.measurements === 0) reasons.push("Add a measurement. Results only include measured qubits.");
+  if (backend.qubits < circuit.numQubits) {
+    reasons.push(`${backend.name} has ${backend.qubits} qubits and this circuit uses ${circuit.numQubits}.`);
+  }
+  if (backend.provider.startsWith("IonQ")) {
+    const late = gatesAfterMeasure(circuit);
+    if (late.length > 0) {
+      reasons.push(
+        `IonQ measures every qubit once, at the end. Move the gates after the measurement on qubit ${late.join(", ")}.`,
+      );
+    }
+  }
+  return reasons;
+}
+
+// --- Angle input -----------------------------------------------------------
+
+/**
+ * Parses an angle typed by the user, in radians: numbers, pi (or π), + - * /
+ * and parentheses, e.g. "pi/2", "-3*pi/4", "0.5", "2pi". Returns null for
+ * anything else. A tiny recursive-descent parser: never eval.
+ */
+export function parseAngle(input: string): number | null {
+  const src = input.replace(/π/g, "pi").replace(/\s+/g, "").toLowerCase();
+  if (src === "") return null;
+  let i = 0;
+  const peek = () => src[i];
+
+  function number(): number | null {
+    const m = /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(src.slice(i));
+    if (!m) return null;
+    i += m[0].length;
+    return Number(m[0]);
+  }
+  function primary(): number | null {
+    if (peek() === "(") {
+      i++;
+      const v = expr();
+      if (v === null || peek() !== ")") return null;
+      i++;
+      return v;
+    }
+    if (src.startsWith("pi", i)) {
+      i += 2;
+      return Math.PI;
+    }
+    const n = number();
+    if (n === null) return null;
+    // "2pi" means 2*pi.
+    if (src.startsWith("pi", i)) {
+      i += 2;
+      return n * Math.PI;
+    }
+    return n;
+  }
+  function unary(): number | null {
+    if (peek() === "-" || peek() === "+") {
+      const sign = src[i++] === "-" ? -1 : 1;
+      const v = unary();
+      return v === null ? null : sign * v;
+    }
+    return primary();
+  }
+  function term(): number | null {
+    let v = unary();
+    while (v !== null && (peek() === "*" || peek() === "/")) {
+      const op = src[i++];
+      const r = unary();
+      if (r === null) return null;
+      if (op === "/" && r === 0) return null;
+      v = op === "*" ? v * r : v / r;
+    }
+    return v;
+  }
+  function expr(): number | null {
+    let v = term();
+    while (v !== null && (peek() === "+" || peek() === "-")) {
+      const op = src[i++];
+      const r = term();
+      if (r === null) return null;
+      v = op === "+" ? v + r : v - r;
+    }
+    return v;
+  }
+
+  const value = expr();
+  return value !== null && i === src.length && Number.isFinite(value) ? value : null;
+}

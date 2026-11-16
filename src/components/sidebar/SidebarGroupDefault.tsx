@@ -1,5 +1,5 @@
 import { IoDocumentTextSharp } from "react-icons/io5";
-import { MdApps, MdBarChart, MdDashboard } from "react-icons/md";
+import { MdApps, MdBarChart, MdDashboard, MdSchema } from "react-icons/md";
 import { RiCpuFill } from "react-icons/ri";
 
 import { FaChalkboardTeacher } from "react-icons/fa";
@@ -29,6 +29,13 @@ export default function SidebarGroupDefault({
           icon={MdBarChart}
           onNavigate={onNavigate}
           tourId="sidebar-jobs"
+        />
+        <SidebarNavItem
+          name="Composer"
+          href="/composer"
+          icon={MdSchema}
+          onNavigate={onNavigate}
+          tourId="sidebar-composer"
         />
         {/* <SidebarNavItem
           name="Experiments"

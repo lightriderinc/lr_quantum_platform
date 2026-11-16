@@ -1,30 +1,16 @@
 "use client";
 
-import CreditsSummary, { fetchJson, type Credits } from "@/components/billing/CreditsSummary";
+import CreditsSummary from "@/components/billing/CreditsSummary";
 import JobResultView from "@/components/jobs/JobResultView";
 import CircuitSchematic, {
   type CircuitType,
 } from "@/components/quantum/CircuitSchematic";
+import JobSubmitControls from "@/components/quantum/JobSubmitControls";
 import ShotsInput from "@/components/quantum/ShotsInput";
 import LRButton from "@/components/ui/LRButton";
-import WarningBox from "@/components/WarningBox";
-import {
-  isPaidBackend,
-  isPricedPerJob,
-  type QuantumBackendId,
-} from "@/lib/quantum/backends";
-import {
-  CIRCUIT_PAYLOADS,
-  fetchJobPrice,
-  fetchQuantumJobDetail,
-  PriceChangedError,
-  PriceConfirmationRequiredError,
-  submitQuantumJob,
-  type JobPriceQuote,
-} from "@/lib/quantum/client";
-import Link from "next/link";
-import type { Job } from "@/types/job";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useJobSubmission } from "@/hooks/useJobSubmission";
+import type { QuantumBackendId } from "@/lib/quantum/backends";
+import { CIRCUIT_PAYLOADS } from "@/lib/quantum/client";
 import { useEffect, useState } from "react";
 import { MdArrowLeft, MdClose } from "react-icons/md";
 
@@ -49,6 +35,8 @@ function toCircuitType(gate: string | undefined): CircuitType | null {
  * The credit gate only applies when the backend actually costs something —
  * mock backends (costPerShotCents: 0) skip the /api/billing/credits fetch
  * entirely rather than gating on a balance that's never checked server-side.
+ * The credit, price and submit logic lives in useJobSubmission, shared with
+ * the /composer run panel.
  */
 export default function BackendSubmitModal({
   backend,
@@ -64,35 +52,15 @@ export default function BackendSubmitModal({
   successMessage?: React.ReactNode;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
   const [circuit, setCircuit] = useState<CircuitType>(initialCircuit);
   const [shots, setShots] = useState(1000);
-  const [submittedJob, setSubmittedJob] = useState<Job | null>(null);
-
-  const needsCredits = isPaidBackend(backend);
-  // IonQ Forte: priced per job. The user gets a quote, sees it against their
-  // balance, and confirms; the submit then carries the confirmed price.
-  // The same price panel also appears when the server asks for a price on a
-  // backend that is normally free (the IonQ noisy simulator once
-  // IONQ_NOISY_SIM_PRICE_PER_SHOT_USD is set): a quote is then set from the
-  // server's answer, and the next submit confirms it.
-  const pricedPerJob = isPricedPerJob(backend);
-  const [quote, setQuote] = useState<JobPriceQuote | null>(null);
-  const [priceNotice, setPriceNotice] = useState<string | null>(null);
-
-  const { data: credits } = useQuery({
-    queryKey: ["billing", "credits"],
-    queryFn: () => fetchJson<Credits>("/api/billing/credits"),
-    enabled: needsCredits,
+  const submission = useJobSubmission({
+    backend,
+    circuit: CIRCUIT_PAYLOADS[circuit],
+    shots,
+    gate: circuit,
   });
-  // Real QPU access requires an unlocked account — a purchase or credits
-  // received from another user. The free signup grant alone doesn't unlock
-  // it, even if remainingCents > 0. Mirrors hasUnlockedCredits() server-side.
-  const blockedByCredits =
-    needsCredits &&
-    credits !== undefined &&
-    (!credits.hasUnlocked || credits.remainingCents <= 0);
-  const stillCheckingCredits = needsCredits && credits === undefined;
+  const { blockedByCredits, stillCheckingCredits, submittedJob, displayedJob } = submission;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -102,119 +70,9 @@ export default function BackendSubmitModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const {
-    mutate,
-    isPending,
-    isError,
-    error,
-    reset: resetMutation,
-  } = useMutation({
-    mutationFn: async () => {
-      const submitTime = new Date().toISOString();
-      const job = await submitQuantumJob(
-        backend,
-        CIRCUIT_PAYLOADS[circuit],
-        shots,
-        quote?.priceCredits,
-      );
-      return { job, submitTime };
-    },
-    onError: (err) => {
-      // The server re-quoted higher than what was confirmed: show the new
-      // price and ask again. Nothing was charged or sent.
-      if (err instanceof PriceChangedError && quote) {
-        setQuote({ ...quote, priceCredits: err.priceCredits });
-        setPriceNotice(err.message);
-        resetMutation();
-      }
-      if (err instanceof PriceConfirmationRequiredError) {
-        setQuote({
-          priceCredits: err.priceCredits,
-          balanceCredits: err.balanceCredits ?? credits?.remainingCents ?? 0,
-        });
-        setPriceNotice("This job has a price. Review it and confirm to submit.");
-        resetMutation();
-      }
-    },
-    onSuccess: ({ job, submitTime }) => {
-      queryClient.invalidateQueries({ queryKey: ["lr-jobs-list"] });
-      setSubmittedJob({
-        ...job,
-        status: job.status ?? "PENDING",
-        created_at: submitTime,
-        gate: circuit,
-        backend,
-        shots,
-      });
-    },
-  });
-
-  // JobResultView polls this same query key internally once it mounts below
-  // (refetchInterval, every 3s until terminal) — this subscribes to that
-  // same shared cache entry rather than polling separately. submitQuantumJob()'s
-  // response never carries finished_at (it can't — the job hasn't finished
-  // yet at submit time), so without folding this in, job.finished_at stays
-  // permanently unset for a freshly-submitted job and Runtime never has an
-  // end timestamp to compute from. Derived at render time (not written back
-  // into submittedJob via an effect) so this can't trigger a setState-during-
-  // effect render cascade.
-  const { data: submittedJobDetail } = useQuery({
-    queryKey: ["lr-job-detail", submittedJob?.uuid],
-    queryFn: () => fetchQuantumJobDetail(submittedJob!.uuid),
-    enabled: !!submittedJob,
-    retry: 0,
-  });
-
-  // created_at swaps to the persisted DB value (the same one /jobs' list and
-  // detail views use) as soon as it's available — no need to wait for
-  // terminal state, since our DB row exists well before the job finishes.
-  // finished_at still only backfills once genuinely terminal.
-  const displayedJob = submittedJob
-    ? {
-        ...submittedJob,
-        created_at: submittedJobDetail?.persistedCreatedAt ?? submittedJob.created_at,
-        finished_at:
-          submittedJob.finished_at ??
-          (submittedJobDetail?.isInTerminalState ? submittedJobDetail.finishedAt : undefined),
-      }
-    : submittedJob;
-
-  const {
-    mutate: requestQuote,
-    isPending: isQuoting,
-    error: quoteError,
-    reset: resetQuote,
-  } = useMutation({
-    mutationFn: () => fetchJobPrice(backend, CIRCUIT_PAYLOADS[circuit], shots),
-    onSuccess: (q) => {
-      setQuote(q);
-      setPriceNotice(null);
-    },
-  });
-
-  // A quote is for one exact circuit and shot count; changing either clears it.
-  function clearQuote() {
-    setQuote(null);
-    setPriceNotice(null);
-    resetQuote();
-  }
-
-  const balanceCredits = credits?.remainingCents ?? quote?.balanceCredits ?? null;
-  const priceAboveBalance = !!quote && balanceCredits !== null && quote.priceCredits > balanceCredits;
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (pricedPerJob && !quote) {
-      requestQuote();
-      return;
-    }
-    if (quote && priceAboveBalance) return;
-    mutate();
-  }
-
-  function handleTryAnother() {
-    setSubmittedJob(null);
-    resetMutation();
+    submission.submit();
   }
 
   const activeCircuit: CircuitType =
@@ -271,7 +129,7 @@ export default function BackendSubmitModal({
                         variant="secondary-outline"
                         icon={<MdArrowLeft className="text-lg" />}
                         iconPosition="left"
-                        onClick={handleTryAnother}
+                        onClick={submission.reset}
                         className="mt-1 w-fit"
                       >
                         Try Another
@@ -289,10 +147,7 @@ export default function BackendSubmitModal({
                     </label>
                     <select
                       value={circuit}
-                      onChange={(e) => {
-                        setCircuit(e.target.value as CircuitType);
-                        clearQuote();
-                      }}
+                      onChange={(e) => setCircuit(e.target.value as CircuitType)}
                       className="default-radius w-full border border-gray-100 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-gray-300"
                     >
                       {CIRCUITS.map((c) => (
@@ -303,70 +158,9 @@ export default function BackendSubmitModal({
                     </select>
                   </div>
 
-                  <ShotsInput
-                    value={shots}
-                    onChange={(n) => {
-                      setShots(n);
-                      clearQuote();
-                    }}
-                  />
+                  <ShotsInput value={shots} onChange={setShots} />
 
-                  {pricedPerJob && quoteError && (
-                    <p className="text-sm text-red-500">
-                      {quoteError instanceof Error && quoteError.message
-                        ? quoteError.message
-                        : "Couldn't get a price for this job. Please try again."}
-                    </p>
-                  )}
-
-                  {quote && (
-                    <div className="default-radius border border-gray-100 bg-gray-50 p-4 text-sm" data-job-price>
-                      {priceNotice && <p className="mb-2 text-amber-700">{priceNotice}</p>}
-                      <div className="flex justify-between gap-4">
-                        <span className="text-gray-600">Price for this job</span>
-                        <span className="font-semibold text-gray-900">{quote.priceCredits.toLocaleString()} credits</span>
-                      </div>
-                      {pricedPerJob && quote.minimumCredits != null && quote.minimumCredits > 0 && (
-                        <p className="mt-1 text-right text-xs text-gray-500" data-forte-minimum>
-                          Minimum {quote.minimumCredits.toLocaleString()} credits per job
-                        </p>
-                      )}
-                      {balanceCredits !== null && (
-                        <div className="mt-1 flex justify-between gap-4">
-                          <span className="text-gray-600">Your balance</span>
-                          <span className="text-gray-900">{balanceCredits.toLocaleString()} credits</span>
-                        </div>
-                      )}
-                      {priceAboveBalance ? (
-                        <p className="mt-3 text-red-600" data-price-blocked>
-                          You need {quote.priceCredits.toLocaleString()} credits for this job but have{" "}
-                          {balanceCredits!.toLocaleString()}.{" "}
-                          <Link href="/settings/manage-credits/purchase" className="brand-link">
-                            Buy credits
-                          </Link>{" "}
-                          to submit it.
-                        </p>
-                      ) : (
-                        <p className="mt-3 text-gray-500">
-                          The price is charged when you submit. It is not adjusted after the job runs.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {isError && (
-                    <p className="text-sm text-red-500">
-                      {error instanceof Error && error.message
-                        ? error.message
-                        : "Failed to submit job. Please try again."}
-                    </p>
-                  )}
-
-                  {needsCredits && (
-                    <WarningBox>
-                      Submitting circuits to QPUs will cost you credits
-                    </WarningBox>
-                  )}
+                  <JobSubmitControls submission={submission} />
 
                   <div className="flex justify-end gap-3 pt-1">
                     <LRButton variant="secondary-outline" onClick={onClose}>
@@ -375,17 +169,9 @@ export default function BackendSubmitModal({
                     <LRButton
                       variant="primary"
                       type="submit"
-                      disabled={isPending || isQuoting || (!!quote && priceAboveBalance)}
+                      disabled={!submission.canSubmit}
                     >
-                      {pricedPerJob && !quote
-                        ? isQuoting
-                          ? "Getting price…"
-                          : "Get price"
-                        : isPending
-                          ? "Submitting…"
-                          : quote
-                            ? `Confirm and submit (${quote.priceCredits.toLocaleString()} credits)`
-                            : "Submit Job"}
+                      {submission.submitLabel}
                     </LRButton>
                   </div>
                 </form>
