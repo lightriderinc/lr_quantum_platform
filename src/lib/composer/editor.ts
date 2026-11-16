@@ -2,7 +2,6 @@ import {
   EMPTY_CIRCUIT,
   gateDef,
   isOccupied,
-  MAX_QUBITS,
   MIN_QUBITS,
   type Circuit,
   type GateName,
@@ -27,9 +26,10 @@ export type EditorAction =
   | { type: "move"; id: string; qubits: number[]; column: number }
   | { type: "remove"; id: string }
   | { type: "setParams"; id: string; params: number[] }
-  | { type: "addQubit" }
+  | { type: "addQubit"; max: number }
   | { type: "removeQubit" }
   | { type: "measureAll" }
+  | { type: "ghz" }
   | { type: "clear" }
   | { type: "undo" }
   | { type: "redo" };
@@ -94,7 +94,7 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
       };
     }
     case "addQubit": {
-      if (circuit.numQubits >= MAX_QUBITS) return circuit;
+      if (circuit.numQubits >= action.max) return circuit;
       const numQubits = circuit.numQubits + 1;
       return {
         numQubits,
@@ -123,6 +123,15 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
         ...circuit,
         gates: [...circuit.gates, ...missing.map((q) => ({ id: newGateId(), name: "measure" as const, qubits: [q], column }))],
       };
+    }
+    case "ghz": {
+      // Replaces the circuit with a GHZ state on every qubit: H on q0, a
+      // CNOT chain q0 -> q1 -> ... -> q(n-1), then a measurement on each.
+      const n = circuit.numQubits;
+      const gates: PlacedGate[] = [{ id: newGateId(), name: "h", qubits: [0], column: 0 }];
+      for (let q = 1; q < n; q++) gates.push({ id: newGateId(), name: "cx", qubits: [q - 1, q], column: q });
+      for (let q = 0; q < n; q++) gates.push({ id: newGateId(), name: "measure", qubits: [q], column: n });
+      return { ...circuit, gates };
     }
     case "clear":
       return circuit.gates.length === 0 ? circuit : { ...circuit, gates: [] };

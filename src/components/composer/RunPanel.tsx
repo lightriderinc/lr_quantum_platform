@@ -19,6 +19,21 @@ import Link from "next/link";
 import { useState } from "react";
 import { MdArrowLeft } from "react-icons/md";
 
+/**
+ * Backends a job can be sent to (no "Coming soon" cards), from the same
+ * hooks as the Backends page. Used by the run panel and by the composer (for
+ * the qubit limit); React Query shares one fetch between them.
+ */
+export function useRunnableBackends() {
+  const { data: iqm = [], isLoading: iqmLoading } = useIqmBackends();
+  const { data: rigetti = [], isLoading: rigettiLoading } = useRigettiBackends();
+  const { data: ionq = [], isLoading: ionqLoading } = useIonqBackends();
+  return {
+    runnable: [...iqm, ...rigetti, ...ionq].filter((b) => getQuantumBackendId(b.id) !== null),
+    loading: iqmLoading || rigettiLoading || ionqLoading,
+  };
+}
+
 // Run panel: pick a backend (QPUs / Simulators, as on the Backends page, with
 // live status), set shots, and submit through the same flow as every other
 // submit (useJobSubmission: credit gate, Forte "Get price" then confirm,
@@ -29,23 +44,22 @@ export default function RunPanel({
   isAuthenticated,
   blockers,
   onMeasureAll,
+  selectedId,
+  onSelect,
 }: {
   payload: LrCircuitPayload;
+  /** The chosen backend's catalog id, or null (nothing chosen yet). Owned by the composer, which limits qubits by it. */
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   isAuthenticated: boolean;
   /** Why this circuit can't run yet, per backend (empty when it can). */
   blockers: (backend: Backend) => string[];
   onMeasureAll: () => void;
 }) {
-  const { data: iqm = [], isLoading: iqmLoading } = useIqmBackends();
-  const { data: rigetti = [], isLoading: rigettiLoading } = useRigettiBackends();
-  const { data: ionq = [], isLoading: ionqLoading } = useIonqBackends();
-  const loading = iqmLoading || rigettiLoading || ionqLoading;
-  // Only backends a job can actually be sent to (no "Coming soon" cards).
-  const runnable = [...iqm, ...rigetti, ...ionq].filter((b) => getQuantumBackendId(b.id) !== null);
+  const { runnable, loading } = useRunnableBackends();
   const counts = countByTab(runnable);
 
   const [tab, setTab] = useState<BackendTab>("qpus");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [shots, setShots] = useState(1000);
 
   const selected = runnable.find((b) => b.id === selectedId) ?? null;
@@ -131,7 +145,7 @@ export default function RunPanel({
                     value={b.id}
                     checked={checked}
                     disabled={tooSmall}
-                    onChange={() => setSelectedId(b.id)}
+                    onChange={() => onSelect(b.id)}
                     className="accent-[var(--brand-primary)]"
                   />
                   <span className="min-w-0 flex-1">

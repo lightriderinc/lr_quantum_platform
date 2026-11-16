@@ -5,8 +5,9 @@ import {
   formatAngle,
   gateDef,
   gatesAfterMeasure,
-  MAX_QUBITS,
+  maxQubitsFor,
   MIN_QUBITS,
+  PREVIEW_MAX_QUBITS,
   parseAngle,
   runBlockers,
   toLrCircuit,
@@ -23,7 +24,7 @@ import CircuitGrid, { type PendingGate } from "./CircuitGrid";
 import GatePalette, { type DragPayload } from "./GatePalette";
 import ProbabilityPanel from "./ProbabilityPanel";
 import QasmPanel from "./QasmPanel";
-import RunPanel from "./RunPanel";
+import RunPanel, { useRunnableBackends } from "./RunPanel";
 
 // A Bell pair to start from, so the preview and QASM show something useful
 // straight away. Fixed ids keep the server and client render identical.
@@ -51,6 +52,11 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
   const [angleText, setAngleText] = useState("pi/2");
   const [pending, setPending] = useState<PendingGate | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Backend chosen in the run panel: its qubit count is the editor's limit.
+  const [backendId, setBackendId] = useState<string | null>(null);
+  const { runnable } = useRunnableBackends();
+  const chosenBackend = runnable.find((b) => b.id === backendId) ?? null;
+  const maxQubits = maxQubitsFor(chosenBackend);
 
   const angle = parseAngle(angleText);
   const selectedGate = circuit.gates.find((g) => g.id === selectedId) ?? null;
@@ -58,7 +64,10 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
   const payload = useMemo(() => toLrCircuit(circuit), [circuit]);
   const qasm = useMemo(() => toQasm3(circuit), [circuit]);
   const stats = useMemo(() => circuitStats(circuit), [circuit]);
-  const preview = useMemo(() => outcomeProbabilities(circuit), [circuit]);
+  const preview = useMemo(
+    () => (circuit.numQubits <= PREVIEW_MAX_QUBITS ? outcomeProbabilities(circuit) : null),
+    [circuit],
+  );
   const lateMeasures = useMemo(() => gatesAfterMeasure(circuit), [circuit]);
 
   function placeAt(name: GateName, qubit: number, column: number) {
@@ -162,10 +171,16 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
               <button
                 type="button"
                 className={toolButton}
-                onClick={() => dispatch({ type: "addQubit" })}
-                disabled={circuit.numQubits >= MAX_QUBITS}
+                onClick={() => dispatch({ type: "addQubit", max: maxQubits })}
+                disabled={circuit.numQubits >= maxQubits}
                 aria-label="Add a qubit"
-                title={circuit.numQubits >= MAX_QUBITS ? `Up to ${MAX_QUBITS} qubits in the composer` : "Add a qubit"}
+                title={
+                  circuit.numQubits >= maxQubits
+                    ? chosenBackend
+                      ? `${chosenBackend.name} has ${maxQubits} qubits`
+                      : `Up to ${maxQubits} qubits until you choose a backend`
+                    : "Add a qubit"
+                }
               >
                 <MdAdd />
               </button>
@@ -173,6 +188,18 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
             <span className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
             <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every qubit that isn't measured yet">
               <MdPlaylistAddCheck /> Measure all
+            </button>
+            <button
+              type="button"
+              className={toolButton}
+              onClick={() => {
+                dispatch({ type: "ghz" });
+                setSelectedId(null);
+                setPending(null);
+              }}
+              title={`Replace the circuit with a GHZ state on all ${circuit.numQubits} qubits: H on q[0], a CNOT chain, then measure all`}
+            >
+              GHZ
             </button>
             <button
               type="button"
@@ -247,6 +274,8 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
         <RunPanel
           payload={payload}
           isAuthenticated={isAuthenticated}
+          selectedId={backendId}
+          onSelect={setBackendId}
           blockers={(backend) => runBlockers(circuit, backend)}
           onMeasureAll={() => dispatch({ type: "measureAll" })}
         />

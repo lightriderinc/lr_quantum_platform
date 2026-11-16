@@ -1,8 +1,9 @@
-import { orderedGates, type Circuit, type PlacedGate } from "./circuit";
+import { orderedGates, PREVIEW_MAX_QUBITS, type Circuit, type PlacedGate } from "./circuit";
 
 // In-browser statevector simulation for the composer's probability preview.
-// At most 12 qubits (4,096 amplitudes), so a plain loop over the state per
-// gate is instant. Qubit q is bit q of the basis-state index (qiskit's
+// At most PREVIEW_MAX_QUBITS (12) qubits, 4,096 amplitudes, so a plain loop
+// over the state per gate is instant; larger circuits are refused rather
+// than allocating 2^n amplitudes. Qubit q is bit q of the basis-state index (qiskit's
 // little-endian order), and outcome keys are printed with the highest
 // classical bit on the left, the same as job results.
 //
@@ -46,6 +47,9 @@ export interface Statevector {
 /** Final state of the circuit's gates from |0...0>, ignoring measurements and barriers. */
 export function simulate(circuit: Circuit): Statevector {
   const n = circuit.numQubits;
+  if (n > PREVIEW_MAX_QUBITS) {
+    throw new RangeError(`The preview simulates up to ${PREVIEW_MAX_QUBITS} qubits; this circuit has ${n}.`);
+  }
   const size = 1 << n;
   const re = new Float64Array(size);
   const im = new Float64Array(size);

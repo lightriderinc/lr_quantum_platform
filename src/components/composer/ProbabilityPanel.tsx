@@ -1,5 +1,6 @@
 "use client";
 
+import { PREVIEW_MAX_QUBITS } from "@/lib/composer/circuit";
 import type { ProbabilityPreview } from "@/lib/composer/statevector";
 
 const MAX_BARS = 16;
@@ -11,10 +12,22 @@ export default function ProbabilityPanel({
   preview,
   measuredMidCircuit,
 }: {
-  preview: ProbabilityPreview;
+  /** Null above PREVIEW_MAX_QUBITS: the chart is replaced by a note. */
+  preview: ProbabilityPreview | null;
   /** Qubits with a gate after their measurement: the preview treats every measurement as final. */
   measuredMidCircuit: number[];
 }) {
+  if (!preview) {
+    return (
+      <section className="flex min-w-0 flex-col default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
+        <h2 className="mb-3 text-base font-semibold text-gray-900">Probabilities</h2>
+        <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-gray-500" data-preview-limit>
+          Preview is available up to {PREVIEW_MAX_QUBITS} qubits. Run the circuit to see results.
+        </p>
+      </section>
+    );
+  }
+
   const shown = preview.outcomes.slice(0, MAX_BARS);
   const hidden = preview.outcomes.length - shown.length;
 

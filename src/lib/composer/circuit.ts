@@ -9,8 +9,16 @@
 // Every gate in the palette below is one qpu-proxy's IonQ adapter emits
 // verbatim (its _NATIVE set), and a qiskit method for IQM.
 
-export const MAX_QUBITS = 12;
+/** The in-browser preview simulates up to this many qubits (2^12 amplitudes); above it, only the chart is hidden. */
+export const PREVIEW_MAX_QUBITS = 12;
+/** Most qubits the editor allows when no backend is chosen. */
+export const DEFAULT_MAX_QUBITS = 36;
 export const MIN_QUBITS = 1;
+
+/** Qubit limit for the editor: the chosen backend's qubit count, or DEFAULT_MAX_QUBITS with none chosen. */
+export function maxQubitsFor(backend: { qubits: number } | null | undefined): number {
+  return backend && backend.qubits >= MIN_QUBITS ? backend.qubits : DEFAULT_MAX_QUBITS;
+}
 
 export type GateName =
   | "h" | "x" | "y" | "z" | "s" | "t" | "sdg" | "tdg" | "sx"
