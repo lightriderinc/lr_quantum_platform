@@ -16,10 +16,18 @@ import {
   type GateName,
   type PlacedGate,
 } from "@/lib/composer/circuit";
-import { editorReducer, initialEditorState } from "@/lib/composer/editor";
-import { outcomeProbabilities } from "@/lib/composer/statevector";
-import { useEffect, useMemo, useReducer, useState } from "react";
-import { MdAdd, MdDeleteOutline, MdPlaylistAddCheck, MdRedo, MdRemove, MdUndo } from "react-icons/md";
+import { CIRCUIT_TEMPLATES, editorReducer, initialEditorState, type CircuitTemplate } from "@/lib/composer/editor";
+import { outcomeProbabilities, qubitSummaries, simulate } from "@/lib/composer/statevector";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  MdAdd,
+  MdDeleteOutline,
+  MdExpandMore,
+  MdPlaylistAddCheck,
+  MdRedo,
+  MdRemove,
+  MdUndo,
+} from "react-icons/md";
 import CircuitGrid, { type PendingGate } from "./CircuitGrid";
 import GatePalette, { type DragPayload } from "./GatePalette";
 import ProbabilityPanel from "./ProbabilityPanel";
@@ -39,7 +47,8 @@ const STARTER: Circuit = {
 };
 
 const toolButton =
-  "inline-flex h-8 items-center gap-1 default-radius border border-gray-200 bg-white px-2.5 text-sm text-gray-700 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer";
+  "inline-flex h-8 shrink-0 items-center gap-1 default-radius border border-gray-200 bg-white px-2 text-sm text-gray-700 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer";
+const iconButton = `${toolButton} w-8 justify-center px-0`;
 
 function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
@@ -64,10 +73,13 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
   const payload = useMemo(() => toLrCircuit(circuit), [circuit]);
   const qasm = useMemo(() => toQasm3(circuit), [circuit]);
   const stats = useMemo(() => circuitStats(circuit), [circuit]);
-  const preview = useMemo(
-    () => (circuit.numQubits <= PREVIEW_MAX_QUBITS ? outcomeProbabilities(circuit) : null),
-    [circuit],
-  );
+  // One simulation feeds both the chart and the per-qubit indicators; none
+  // above the preview limit.
+  const simulation = useMemo(() => {
+    if (circuit.numQubits > PREVIEW_MAX_QUBITS) return null;
+    const sv = simulate(circuit);
+    return { preview: outcomeProbabilities(circuit, sv), qubits: qubitSummaries(sv) };
+  }, [circuit]);
   const lateMeasures = useMemo(() => gatesAfterMeasure(circuit), [circuit]);
 
   function placeAt(name: GateName, qubit: number, column: number) {
@@ -146,75 +158,84 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex min-w-0 flex-col gap-6">
         <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Circuit editor">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <button type="button" className={toolButton} onClick={() => dispatch({ type: "undo" })} disabled={state.past.length === 0} title="Undo (Ctrl+Z)">
-              <MdUndo /> Undo
+          <div className="mb-4 flex flex-wrap items-center gap-1.5 lg:flex-nowrap" role="toolbar" aria-label="Circuit tools">
+            <button
+              type="button"
+              className={iconButton}
+              onClick={() => dispatch({ type: "undo" })}
+              disabled={state.past.length === 0}
+              aria-label="Undo"
+              title="Undo (Ctrl+Z)"
+            >
+              <MdUndo />
             </button>
-            <button type="button" className={toolButton} onClick={() => dispatch({ type: "redo" })} disabled={state.future.length === 0} title="Redo (Ctrl+Shift+Z)">
-              <MdRedo /> Redo
+            <button
+              type="button"
+              className={iconButton}
+              onClick={() => dispatch({ type: "redo" })}
+              disabled={state.future.length === 0}
+              aria-label="Redo"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <MdRedo />
             </button>
-            <span className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
-            <span className="inline-flex items-center gap-1 text-sm text-gray-700">
-              <button
-                type="button"
-                className={toolButton}
-                onClick={() => dispatch({ type: "removeQubit" })}
-                disabled={circuit.numQubits <= MIN_QUBITS}
-                aria-label="Remove the last qubit"
-                title="Remove the last qubit and its gates"
-              >
-                <MdRemove />
-              </button>
-              <span className="min-w-16 text-center tabular-nums">
-                {circuit.numQubits} {circuit.numQubits === 1 ? "qubit" : "qubits"}
-              </span>
-              <button
-                type="button"
-                className={toolButton}
-                onClick={() => dispatch({ type: "addQubit", max: maxQubits })}
-                disabled={circuit.numQubits >= maxQubits}
-                aria-label="Add a qubit"
-                title={
-                  circuit.numQubits >= maxQubits
-                    ? chosenBackend
-                      ? `${chosenBackend.name} has ${maxQubits} qubits`
-                      : `Up to ${maxQubits} qubits until you choose a backend`
-                    : "Add a qubit"
-                }
-              >
-                <MdAdd />
-              </button>
+            <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
+            <button
+              type="button"
+              className={iconButton}
+              onClick={() => dispatch({ type: "removeQubit" })}
+              disabled={circuit.numQubits <= MIN_QUBITS}
+              aria-label="Remove the last qubit"
+              title="Remove the last qubit and its gates"
+            >
+              <MdRemove />
+            </button>
+            <span className="min-w-16 shrink-0 text-center text-sm tabular-nums text-gray-700">
+              {circuit.numQubits} {circuit.numQubits === 1 ? "qubit" : "qubits"}
             </span>
-            <span className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" aria-hidden />
+            <button
+              type="button"
+              className={iconButton}
+              onClick={() => dispatch({ type: "addQubit", max: maxQubits })}
+              disabled={circuit.numQubits >= maxQubits}
+              aria-label="Add a qubit"
+              title={
+                circuit.numQubits >= maxQubits
+                  ? chosenBackend
+                    ? `${chosenBackend.name} has ${maxQubits} qubits`
+                    : `Up to ${maxQubits} qubits until you choose a backend`
+                  : "Add a qubit"
+              }
+            >
+              <MdAdd />
+            </button>
+            <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
             <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every qubit that isn't measured yet">
               <MdPlaylistAddCheck /> Measure all
             </button>
-            <button
-              type="button"
-              className={toolButton}
-              onClick={() => {
-                dispatch({ type: "ghz" });
+            <TemplatesMenu
+              onPick={(template) => {
+                dispatch({ type: "template", template });
                 setSelectedId(null);
                 setPending(null);
               }}
-              title={`Replace the circuit with a GHZ state on all ${circuit.numQubits} qubits: H on q[0], a CNOT chain, then measure all`}
-            >
-              GHZ
-            </button>
+            />
             <button
               type="button"
-              className={toolButton}
+              className={iconButton}
               onClick={() => {
                 dispatch({ type: "clear" });
                 setSelectedId(null);
                 setPending(null);
               }}
               disabled={circuit.gates.length === 0}
+              aria-label="Clear the circuit"
+              title="Clear the circuit"
             >
-              <MdDeleteOutline /> Clear
+              <MdDeleteOutline />
             </button>
 
-            <dl className="ml-auto flex items-center gap-4 text-sm" aria-label="Circuit size">
+            <dl className="ml-auto flex shrink-0 items-center gap-3 pl-2 text-sm" aria-label="Circuit size">
               <Stat label="Gates" value={stats.gates} />
               <Stat label="Depth" value={stats.depth} />
               <Stat label="Measurements" value={stats.measurements} />
@@ -246,6 +267,7 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
                   setPending(null);
                 }}
                 onRemoveGate={removeGate}
+                qubitStates={simulation?.qubits ?? null}
               />
               {selectedGate ? (
                 <GateInspector
@@ -264,10 +286,8 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
           </div>
         </section>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ProbabilityPanel preview={preview} measuredMidCircuit={lateMeasures} />
-          <QasmPanel qasm={qasm} />
-        </div>
+        <ProbabilityPanel preview={simulation?.preview ?? null} bits={circuit.numQubits} measuredMidCircuit={lateMeasures} />
+        <QasmPanel qasm={qasm} />
       </div>
 
       <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
@@ -280,6 +300,61 @@ export default function Composer({ isAuthenticated }: { isAuthenticated: boolean
           onMeasureAll={() => dispatch({ type: "measureAll" })}
         />
       </div>
+    </div>
+  );
+}
+
+// Templates: ready-made circuits. Each replaces the circuit as one undo step.
+function TemplatesMenu({ onPick }: { onPick: (template: CircuitTemplate) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        className={toolButton}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        Templates <MdExpandMore />
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-0 top-full z-30 mt-1 w-72 default-radius border border-gray-200 bg-white p-1 shadow-lg">
+          {CIRCUIT_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onPick(t.id);
+                setOpen(false);
+              }}
+              className="block w-full cursor-pointer default-radius px-3 py-2 text-left hover:bg-gray-50"
+            >
+              <span className="block text-sm font-medium text-gray-900">{t.label}</span>
+              <span className="block text-xs text-gray-500">{t.description} Replaces the current circuit.</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -316,7 +391,7 @@ function GateInspector({
   return (
     <div className="flex flex-wrap items-center gap-3 default-radius border border-gray-200 bg-white px-3 py-2 text-sm">
       <span className="font-medium text-gray-900">
-        {def.title} on {where}
+        {def.fullName} on {where}
       </span>
       {def.angle && (
         <label className="flex items-center gap-2 text-xs text-gray-500">

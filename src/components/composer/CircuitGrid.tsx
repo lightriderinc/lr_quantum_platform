@@ -1,13 +1,17 @@
 "use client";
 
 import { formatAngle, gateDef, gateSpan, type Circuit, type PlacedGate } from "@/lib/composer/circuit";
+import type { QubitSummary } from "@/lib/composer/statevector";
 import { MdClose } from "react-icons/md";
 import { DRAG_TYPE, type DragPayload } from "./GatePalette";
+import { GATE_COLORS, MULTI_INK } from "./gateStyles";
 
 const CELL = 48;
 const LABEL = 52;
 const BOX = 36;
 const MIN_COLUMNS = 12;
+/** Width of the per-qubit state column at the right end of the lines. */
+const STATE_COL = 48;
 
 /** A two-qubit gate waiting for its second qubit: first qubit picked in `column`. */
 export interface PendingGate {
@@ -19,7 +23,9 @@ export interface PendingGate {
 // The circuit grid: one row per qubit, one column per step. Empty cells
 // place the picked gate (or a dropped one); placed gates can be selected,
 // dragged to another spot, or removed with their x. Drawn with positioned
-// elements rather than SVG so every cell and gate is a real button.
+// elements rather than SVG so every cell and gate is a real button. When the
+// circuit is small enough to simulate, each line ends in a circle filled by
+// that qubit's probability of reading 1.
 export default function CircuitGrid({
   circuit,
   pending,
@@ -28,8 +34,11 @@ export default function CircuitGrid({
   onDropPayload,
   onSelectGate,
   onRemoveGate,
+  qubitStates,
 }: {
   circuit: Circuit;
+  /** Per-qubit state from the preview simulation; null above the preview limit (no indicators). */
+  qubitStates: QubitSummary[] | null;
   pending: PendingGate | null;
   selectedId: string | null;
   onCellClick: (qubit: number, column: number) => void;
@@ -53,7 +62,8 @@ export default function CircuitGrid({
   }
 
   return (
-    <div className="overflow-x-auto default-radius border border-gray-100 bg-white">
+    <div className="flex default-radius border border-gray-100 bg-white">
+      <div className="min-w-0 flex-1 overflow-x-auto">
       <div className="relative select-none" style={{ width, height: height + 8, paddingTop: 4 }}>
         <div className="absolute inset-x-0" style={{ top: 4, height }}>
           {/* Qubit labels and wires */}
@@ -113,6 +123,57 @@ export default function CircuitGrid({
           ))}
         </div>
       </div>
+      </div>
+
+      {qubitStates && (
+        <div
+          className="relative shrink-0 border-l border-gray-100"
+          style={{ width: STATE_COL, height: height + 8, paddingTop: 4 }}
+          aria-label="Qubit states"
+        >
+          {qubitStates.map((s) => (
+            <QubitStateDot key={s.qubit} state={s} top={4 + s.qubit * CELL} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A circle filled from the bottom by P(1), with the qubit's numbers on hover
+// or keyboard focus.
+function QubitStateDot({ state, top }: { state: QubitSummary; top: number }) {
+  const pct = (p: number) => `${(p * 100).toFixed(1)}%`;
+  const rows: [string, string][] = [
+    ["Prob of |0⟩", pct(state.p0)],
+    ["Prob of |1⟩", pct(state.p1)],
+    ["Phase φ", state.phase === null ? "not defined" : formatAngle(state.phase)],
+    ["Purity", state.purity.toFixed(2)],
+  ];
+  const tipId = `qubit-state-${state.qubit}`;
+  return (
+    <div className="group absolute inset-x-0 flex items-center justify-center" style={{ top, height: CELL }}>
+      <span
+        tabIndex={0}
+        aria-describedby={tipId}
+        aria-label={`q[${state.qubit}]: probability of 1 is ${pct(state.p1)}`}
+        className="relative block h-6 w-6 overflow-hidden rounded-full border-2 border-gray-400 bg-white outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]"
+      >
+        <span className="absolute inset-x-0 bottom-0 bg-blue-500 transition-all duration-300" style={{ height: `${state.p1 * 100}%` }} />
+      </span>
+      <span
+        id={tipId}
+        role="tooltip"
+        className="pointer-events-none absolute right-full top-1/2 z-30 mr-1 hidden w-44 -translate-y-1/2 default-radius bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block group-focus-within:block"
+      >
+        <span className="mb-1 block font-semibold">q[{state.qubit}]</span>
+        {rows.map(([k, v]) => (
+          <span key={k} className="flex justify-between gap-3">
+            <span className="text-gray-300">{k}</span>
+            <span className="font-mono tabular-nums">{v}</span>
+          </span>
+        ))}
+      </span>
     </div>
   );
 }
@@ -172,11 +233,7 @@ function GateMark({
         ) : (
           <span
             className={`absolute flex items-center justify-center rounded border font-mono font-semibold ${
-              gate.name === "measure"
-                ? "border-gray-500 bg-gray-700 text-white"
-                : def.angle
-                  ? "border-amber-300 bg-amber-50 text-amber-900"
-                  : "border-blue-300 bg-blue-50 text-blue-900"
+              gate.name === "measure" ? "border-gray-500 bg-gray-700 text-white" : GATE_COLORS[def.color].box
             } ${ring}`}
             style={{
               left: (CELL - BOX) / 2,
@@ -185,7 +242,7 @@ function GateMark({
               height: BOX,
               fontSize: def.label.length > 2 || def.angle ? 11 : 13,
             }}
-            title={label}
+            title={`${def.fullName}${gate.params?.length ? ` (${formatAngle(gate.params[0])})` : ""}: ${def.description}`}
           >
             {gate.name === "measure" ? <MeterIcon /> : def.label}
           </span>
@@ -223,12 +280,12 @@ function TwoQubitMark({
   const top = Math.min(y(a), y(b));
   const bottom = Math.max(y(a), y(b));
   const dot = (q: number) => (
-    <span key={`dot-${q}`} className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-900" style={{ left: CELL / 2, top: y(q) }} />
+    <span key={`dot-${q}`} className={`absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full ${MULTI_INK.fill}`} style={{ left: CELL / 2, top: y(q) }} />
   );
   const cross = (q: number) => (
     <span
       key={`x-${q}`}
-      className="absolute -translate-x-1/2 -translate-y-1/2 text-lg font-bold leading-none text-gray-900"
+      className={`absolute -translate-x-1/2 -translate-y-1/2 text-lg font-bold leading-none ${MULTI_INK.text}`}
       style={{ left: CELL / 2, top: y(q) }}
     >
       ×
@@ -237,15 +294,15 @@ function TwoQubitMark({
   const target = (q: number) => (
     <span
       key={`t-${q}`}
-      className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-gray-900 bg-white text-base font-bold leading-none text-gray-900"
+      className={`absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-white text-base font-bold leading-none ${MULTI_INK.border} ${MULTI_INK.text}`}
       style={{ left: CELL / 2, top: y(q) }}
     >
       +
     </span>
   );
   return (
-    <span className={`absolute inset-0 rounded ${ring}`} title={gateDef(gate.name).title}>
-      <span className="absolute w-0.5 -translate-x-1/2 bg-gray-900" style={{ left: CELL / 2, top, height: bottom - top }} />
+    <span className={`absolute inset-0 rounded ${ring}`} title={`${gateDef(gate.name).fullName}: ${gateDef(gate.name).description}`}>
+      <span className={`absolute w-0.5 -translate-x-1/2 ${MULTI_INK.fill}`} style={{ left: CELL / 2, top, height: bottom - top }} />
       {gate.name === "cx" && [dot(a), target(b)]}
       {gate.name === "cz" && [dot(a), dot(b)]}
       {gate.name === "swap" && [cross(a), cross(b)]}

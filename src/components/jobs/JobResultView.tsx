@@ -5,9 +5,11 @@ import DownloadButton from "@/components/ui/DownloadButton";
 import JobModeTag from "@/components/jobs/JobModeTag";
 import JobStatusBadge from "@/components/jobs/JobStatusBadge";
 import { formatDuration } from "@/lib/formatDuration";
+import { RESULT_TOP_OUTCOMES, shortenBitstring, visibleOutcomes } from "@/lib/jobs/outcomes";
 import { fetchQuantumJobDetail, fetchQuantumJobResult } from "@/lib/quantum/client";
 import type { Job } from "@/types/job";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 const TERMINAL = new Set(["COMPLETED", "FAILED", "ABORTED"]);
 
@@ -65,6 +67,9 @@ export default function JobResultView({ job, footer }: Props) {
 
   const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
   const countsJson = counts ? JSON.stringify(counts, null, 2) : "";
+  // Many-qubit jobs can return hundreds of outcomes: show the top ones first.
+  const [showAllOutcomes, setShowAllOutcomes] = useState(false);
+  const outcomes = counts ? visibleOutcomes(counts, showAllOutcomes) : { shown: [], total: 0 };
 
   return (
     <div className="flex flex-col gap-5">
@@ -130,14 +135,15 @@ export default function JobResultView({ job, footer }: Props) {
                 Measurement Results
               </h4>
               <div className="space-y-2.5">
-                {Object.entries(counts)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([state, count]) => {
+                {outcomes.shown.map(([state, count]) => {
                     const pct = total > 0 ? (count / total) * 100 : 0;
                     return (
                       <div key={state} className="flex items-center gap-3">
-                        <span className="min-w-10 shrink-0 whitespace-nowrap font-mono text-sm text-gray-700">
-                          |{state}⟩
+                        <span
+                          className="min-w-10 max-w-[45%] shrink-0 overflow-hidden whitespace-nowrap font-mono text-sm text-gray-700"
+                          title={state.length > 16 ? state : undefined}
+                        >
+                          |{shortenBitstring(state)}⟩
                         </span>
                         <div className="flex-1 overflow-hidden rounded bg-gray-100">
                           <div
@@ -152,6 +158,18 @@ export default function JobResultView({ job, footer }: Props) {
                     );
                   })}
               </div>
+              {outcomes.total > RESULT_TOP_OUTCOMES && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllOutcomes((v) => !v)}
+                  className="brand-link mt-3 cursor-pointer text-sm"
+                  aria-expanded={showAllOutcomes}
+                >
+                  {showAllOutcomes
+                    ? `Show the top ${RESULT_TOP_OUTCOMES}`
+                    : `Show all ${outcomes.total.toLocaleString()} outcomes`}
+                </button>
+              )}
             </div>
 
             {/* Raw counts, exportable — the source data behind the bars above. */}
@@ -168,7 +186,7 @@ export default function JobResultView({ job, footer }: Props) {
                   />
                 </div>
               </div>
-              <pre className="default-radius overflow-x-auto border border-gray-100 bg-gray-50 p-3 font-mono text-xs text-gray-700">
+              <pre className="max-h-64 default-radius overflow-auto border border-gray-100 bg-gray-50 p-3 font-mono text-xs text-gray-700">
                 {countsJson}
               </pre>
             </div>

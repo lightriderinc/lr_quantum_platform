@@ -19,7 +19,7 @@ describe("IonQ catalog cards", () => {
     const cards = mapIonqBackends(listing());
     expect(cards.map((b) => [b.id, b.type, b.qubits])).toEqual([
       ["ionq.ionq:mock", "Simulator", 29],
-      ["ionq.forte-1:mock", "Simulator", 36],
+      ["ionq.forte-1:mock", "Simulator", 29],
       ["ionq.forte-1", "QPU", 36],
       ["ionq.forte-enterprise-1", "QPU", 36],
     ]);

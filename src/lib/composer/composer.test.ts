@@ -14,7 +14,13 @@ import {
   type PlacedGate,
 } from "./circuit";
 import { applyEdit, editorReducer, initialEditorState, type EditorState } from "./editor";
-import { outcomeProbabilities, simulate } from "./statevector";
+import {
+  chartAxisMax,
+  outcomeProbabilities,
+  probabilityChartData,
+  qubitSummaries,
+  simulate,
+} from "./statevector";
 
 let n = 0;
 const g = (name: GateName, qubits: number[], column: number, params?: number[]): PlacedGate => ({
@@ -215,6 +221,54 @@ describe("statevector preview", () => {
     expect(probs({ numQubits: 3, gates: [g("x", [0], 0), g("swap", [0, 2], 1)] })).toEqual({ "100": 1 });
   });
 
+  test("per-qubit state: probabilities, phase and purity", () => {
+    const one = (gates: PlacedGate[], q = 0) => qubitSummaries(simulate({ numQubits: 2, gates }))[q];
+    // |0>: certain 0, no phase to speak of, pure.
+    expect(one([])).toMatchObject({ p0: 1, p1: 0, phase: null, purity: 1 });
+    // X: certain 1.
+    expect(one([g("x", [0], 0)])).toMatchObject({ p0: 0, p1: 1, phase: null });
+    // H then S: 50/50 with a phase of pi/2, still pure.
+    const hs = one([g("h", [0], 0), g("s", [0], 1)]);
+    expect(hs.p1).toBeCloseTo(0.5);
+    expect(hs.phase).toBeCloseTo(Math.PI / 2);
+    expect(hs.purity).toBeCloseTo(1);
+    // H then Z: phase pi.
+    expect(Math.abs(one([g("h", [0], 0), g("z", [0], 1)]).phase!)).toBeCloseTo(Math.PI);
+    // Bell pair: each qubit alone is fully mixed (purity 0.5, no phase).
+    for (const q of [0, 1]) {
+      const b = one([g("h", [0], 0), g("cx", [0, 1], 1)], q);
+      expect(b.p1).toBeCloseTo(0.5);
+      expect(b.phase).toBeNull();
+      expect(b.purity).toBeCloseTo(0.5);
+    }
+  });
+
+  test("chart: every basis state up to 5 bits, top 16 above", () => {
+    const bell = probabilityChartData(outcomeProbabilities(BELL), 2);
+    expect(bell.mode).toBe("all");
+    expect(bell.bars.map((b) => [b.outcome, Number(b.probability.toFixed(3))])).toEqual([
+      ["00", 0.5],
+      ["01", 0],
+      ["10", 0],
+      ["11", 0.5],
+    ]);
+    const five = probabilityChartData(outcomeProbabilities({ numQubits: 5, gates: [] }), 5);
+    expect(five.bars).toHaveLength(32);
+
+    // 6 qubits, all in superposition: 64 equal outcomes, only 16 drawn.
+    const h6: PlacedGate[] = Array.from({ length: 6 }, (_, q) => g("h", [q], 0));
+    const six = probabilityChartData(outcomeProbabilities({ numQubits: 6, gates: h6 }), 6);
+    expect(six).toMatchObject({ mode: "top", nonZero: 64 });
+    expect(six.bars).toHaveLength(16);
+  });
+
+  test("chart axis rounds up to a clean value", () => {
+    expect(chartAxisMax(1)).toBe(1);
+    expect(chartAxisMax(0.5)).toBe(0.5);
+    expect(chartAxisMax(0.51)).toBe(0.6);
+    expect(chartAxisMax(0.015625)).toBe(0.05);
+  });
+
   test("the simulator refuses more than 12 qubits instead of allocating 2^n amplitudes", () => {
     expect(() => simulate({ numQubits: 13, gates: [] })).toThrow(RangeError);
     expect(() => outcomeProbabilities({ numQubits: 36, gates: [] })).toThrow(RangeError);
@@ -313,10 +367,26 @@ describe("editor", () => {
     expect(applyEdit(c, { type: "addQubit", max: maxQubitsFor(null) })).toBe(c);
   });
 
+  test("Bell pair template: H, CNOT, measure every qubit; grows a 1-qubit circuit to 2", () => {
+    let s = initialEditorState({ numQubits: 3, gates: [] });
+    s = editorReducer(s, { type: "place", name: "x", qubits: [2], column: 4 });
+    s = editorReducer(s, { type: "template", template: "bell" });
+    expect(toLrCircuit(s.present).instructions).toEqual([
+      { name: "h", qubits: [0] },
+      { name: "cx", qubits: [0, 1] },
+      { name: "measure", qubits: [0], clbits: [0] },
+      { name: "measure", qubits: [1], clbits: [1] },
+      { name: "measure", qubits: [2], clbits: [2] },
+    ]);
+    s = editorReducer(s, { type: "undo" });
+    expect(s.present.gates.map((x) => x.name)).toEqual(["x"]);
+    expect(applyEdit({ numQubits: 1, gates: [] }, { type: "template", template: "bell" }).numQubits).toBe(2);
+  });
+
   test("GHZ: H on q0, CNOT chain, measure all; replaces the circuit in one undo step", () => {
     let s = initialEditorState({ numQubits: 4, gates: [] });
     s = editorReducer(s, { type: "place", name: "x", qubits: [2], column: 5 });
-    s = editorReducer(s, { type: "ghz" });
+    s = editorReducer(s, { type: "template", template: "ghz" });
     const prog = toLrCircuit(s.present).instructions;
     expect(prog).toEqual([
       { name: "h", qubits: [0] },
@@ -333,10 +403,10 @@ describe("editor", () => {
     expect(s.present.gates.map((x) => x.name)).toEqual(["x"]);
 
     // Works past the preview limit too (no simulation needed), and on one qubit.
-    const big = applyEdit({ numQubits: 36, gates: [] }, { type: "ghz" });
+    const big = applyEdit({ numQubits: 36, gates: [] }, { type: "template", template: "ghz" });
     expect(circuitStats(big)).toEqual({ gates: 36, measurements: 36, depth: 37 });
     expect(toQasm3(big)).toContain("cx q[34], q[35];");
-    expect(toLrCircuit(applyEdit({ numQubits: 1, gates: [] }, { type: "ghz" })).instructions).toEqual([
+    expect(toLrCircuit(applyEdit({ numQubits: 1, gates: [] }, { type: "template", template: "ghz" })).instructions).toEqual([
       { name: "h", qubits: [0] },
       { name: "measure", qubits: [0], clbits: [0] },
     ]);

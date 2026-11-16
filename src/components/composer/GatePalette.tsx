@@ -1,6 +1,7 @@
 "use client";
 
 import { GATES, type GateDef, type GateName } from "@/lib/composer/circuit";
+import { GATE_COLORS } from "./gateStyles";
 
 export const DRAG_TYPE = "application/x-lr-composer";
 
@@ -15,7 +16,9 @@ const GROUPS: { id: GateDef["group"]; label: string }[] = [
 ];
 
 // Gate palette: click a gate to pick it (then click a spot on the grid), or
-// drag it onto the grid. RX, RY and RZ use the angle typed below them.
+// drag it onto the grid. Colour-coded by family (gateStyles.ts); hovering or
+// focusing a gate shows its name and what it does. RX, RY and RZ use the
+// angle typed below them.
 export default function GatePalette({
   tool,
   onPick,
@@ -37,27 +40,37 @@ export default function GatePalette({
           <div className="flex flex-wrap gap-1.5">
             {GATES.filter((g) => g.group === group.id).map((g) => {
               const active = tool === g.name;
+              const tipId = `gate-tip-${g.name}`;
               return (
-                <button
-                  key={g.name}
-                  type="button"
-                  draggable
-                  onDragStart={(e) => {
-                    const payload: DragPayload = { kind: "new", name: g.name };
-                    e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload));
-                    e.dataTransfer.effectAllowed = "copy";
-                  }}
-                  onClick={() => onPick(active ? null : g.name)}
-                  title={g.title}
-                  aria-pressed={active}
-                  className={`min-w-10 cursor-grab default-radius border px-2 py-1.5 font-mono text-sm font-semibold transition-colors ${
-                    active
-                      ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white"
-                      : "border-gray-200 bg-white text-gray-800 hover:border-gray-400"
-                  }`}
-                >
-                  {g.label}
-                </button>
+                <span key={g.name} className="group relative">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      const payload: DragPayload = { kind: "new", name: g.name };
+                      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload));
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onClick={() => onPick(active ? null : g.name)}
+                    aria-pressed={active}
+                    aria-describedby={tipId}
+                    className={`min-w-10 cursor-grab default-radius border px-2 py-1.5 font-mono text-sm font-semibold transition-shadow ${
+                      GATE_COLORS[g.color].box
+                    } ${active ? "ring-2 ring-[var(--brand-primary)] ring-offset-1" : "hover:shadow-sm"}`}
+                  >
+                    {g.label}
+                  </button>
+                  <span
+                    id={tipId}
+                    role="tooltip"
+                    className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden w-60 default-radius bg-gray-900 px-3 py-2 text-xs leading-snug text-white shadow-lg group-hover:block group-focus-within:block"
+                  >
+                    <span className="block font-semibold">
+                      {g.label}: {g.fullName}
+                    </span>
+                    <span className="mt-0.5 block text-gray-200">{g.description}</span>
+                  </span>
+                </span>
               );
             })}
           </div>

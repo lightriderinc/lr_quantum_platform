@@ -144,3 +144,86 @@ export function outcomeProbabilities(circuit: Circuit, state: Statevector = simu
     .sort((a, b) => b.probability - a.probability || a.outcome.localeCompare(b.outcome));
   return { basis, outcomes };
 }
+
+// --- Per-qubit state (the indicator at the end of each qubit line) ---------
+
+export interface QubitSummary {
+  qubit: number;
+  /** Probability of reading 0 and 1. */
+  p0: number;
+  p1: number;
+  /** Relative phase of 1 against 0 in radians, (-pi, pi]; null when the qubit has no coherence to measure it by (it is 0, 1, or fully mixed). */
+  phase: number | null;
+  /** Tr(rho^2) of the qubit on its own: 1 when it is in a pure state, 0.5 when fully entangled or mixed. */
+  purity: number;
+}
+
+/**
+ * Each qubit's reduced state, from the final statevector: the probabilities
+ * of 0 and 1, the relative phase, and the purity. A qubit entangled with
+ * others has purity below 1, which is what a Bloch-sphere arrow can't show.
+ */
+export function qubitSummaries(state: Statevector): QubitSummary[] {
+  const { numQubits, re, im } = state;
+  const out: QubitSummary[] = [];
+  for (let q = 0; q < numQubits; q++) {
+    const mask = 1 << q;
+    let p1 = 0;
+    let p0 = 0;
+    // rho_10 = sum over pairs of a(i|mask) * conj(a(i)).
+    let cRe = 0;
+    let cIm = 0;
+    for (let i = 0; i < re.length; i++) {
+      if (i & mask) continue;
+      const j = i | mask;
+      p0 += re[i] * re[i] + im[i] * im[i];
+      p1 += re[j] * re[j] + im[j] * im[j];
+      cRe += re[j] * re[i] + im[j] * im[i];
+      cIm += im[j] * re[i] - re[j] * im[i];
+    }
+    const coherence = Math.hypot(cRe, cIm);
+    out.push({
+      qubit: q,
+      p0,
+      p1,
+      phase: coherence > 1e-9 ? Math.atan2(cIm, cRe) : null,
+      purity: p0 * p0 + p1 * p1 + 2 * coherence * coherence,
+    });
+  }
+  return out;
+}
+
+// --- Probabilities chart ---------------------------------------------------
+
+/** Every basis state is drawn up to this many bits (32 bars); above it, only the most likely outcomes. */
+export const CHART_ALL_STATES_MAX_BITS = 5;
+export const CHART_TOP_OUTCOMES = 16;
+
+export interface ChartData {
+  /** "all": every basis state in order, zeros included; "top": the most likely non-zero outcomes, largest first. */
+  mode: "all" | "top";
+  bars: OutcomeProbability[];
+  /** Non-zero outcomes in total (to say how many are not drawn). */
+  nonZero: number;
+}
+
+export function probabilityChartData(preview: ProbabilityPreview, bits: number): ChartData {
+  const nonZero = preview.outcomes.length;
+  if (bits <= CHART_ALL_STATES_MAX_BITS) {
+    const byOutcome = new Map(preview.outcomes.map((o) => [o.outcome, o.probability]));
+    const bars = Array.from({ length: 1 << bits }, (_, i) => {
+      const outcome = i.toString(2).padStart(bits, "0");
+      return { outcome, probability: byOutcome.get(outcome) ?? 0 };
+    });
+    return { mode: "all", bars, nonZero };
+  }
+  return { mode: "top", bars: preview.outcomes.slice(0, CHART_TOP_OUTCOMES), nonZero };
+}
+
+/** Top of the chart's y axis: the smallest round value at or above the largest bar. */
+export function chartAxisMax(maxProbability: number): number {
+  for (const step of [0.05, 0.1, 0.2, 0.25, 0.4, 0.5, 0.6, 0.75, 0.8, 1]) {
+    if (maxProbability <= step + 1e-12) return step;
+  }
+  return 1;
+}

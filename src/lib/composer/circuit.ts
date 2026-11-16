@@ -26,37 +26,43 @@ export type GateName =
   | "cx" | "cz" | "swap"
   | "measure" | "barrier";
 
+/** Colour family on the palette and grid, as on qBraid: Pauli and H, phase, rotation (with the square root of X), multi-qubit, and neutral for measure and barrier. */
+export type GateColor = "pauli" | "phase" | "rotation" | "multi" | "neutral";
+
 export interface GateDef {
   name: GateName;
   /** Text on the palette button and on the placed gate. */
   label: string;
-  /** Tooltip. */
-  title: string;
+  /** Full name for tooltips, e.g. "Hadamard". */
+  fullName: string;
+  /** One plain-English line on what it does, for tooltips. */
+  description: string;
   /** Number of qubits the user picks: 1, 2, or 0 for the barrier (always every qubit). */
   arity: 0 | 1 | 2;
   /** Takes one angle (RX, RY, RZ). */
   angle?: true;
   group: "single" | "rotation" | "multi" | "other";
+  color: GateColor;
 }
 
 export const GATES: GateDef[] = [
-  { name: "h", label: "H", title: "Hadamard", arity: 1, group: "single" },
-  { name: "x", label: "X", title: "Pauli X (NOT)", arity: 1, group: "single" },
-  { name: "y", label: "Y", title: "Pauli Y", arity: 1, group: "single" },
-  { name: "z", label: "Z", title: "Pauli Z", arity: 1, group: "single" },
-  { name: "s", label: "S", title: "S (phase of pi/2)", arity: 1, group: "single" },
-  { name: "t", label: "T", title: "T (phase of pi/4)", arity: 1, group: "single" },
-  { name: "sdg", label: "S†", title: "S dagger (inverse of S)", arity: 1, group: "single" },
-  { name: "tdg", label: "T†", title: "T dagger (inverse of T)", arity: 1, group: "single" },
-  { name: "sx", label: "√X", title: "Square root of X", arity: 1, group: "single" },
-  { name: "rx", label: "RX", title: "Rotation about X", arity: 1, angle: true, group: "rotation" },
-  { name: "ry", label: "RY", title: "Rotation about Y", arity: 1, angle: true, group: "rotation" },
-  { name: "rz", label: "RZ", title: "Rotation about Z", arity: 1, angle: true, group: "rotation" },
-  { name: "cx", label: "CNOT", title: "Controlled NOT: pick the control qubit, then the target", arity: 2, group: "multi" },
-  { name: "cz", label: "CZ", title: "Controlled Z: pick two qubits", arity: 2, group: "multi" },
-  { name: "swap", label: "SWAP", title: "Swap two qubits", arity: 2, group: "multi" },
-  { name: "measure", label: "M", title: "Measure into the classical bit with the same number", arity: 1, group: "other" },
-  { name: "barrier", label: "Barrier", title: "Barrier across every qubit", arity: 0, group: "other" },
+  { name: "h", label: "H", fullName: "Hadamard", description: "Puts the qubit in a 50/50 superposition of 0 and 1.", arity: 1, group: "single", color: "pauli" },
+  { name: "x", label: "X", fullName: "Pauli X", description: "Flips 0 to 1 and 1 to 0, like a classical NOT.", arity: 1, group: "single", color: "pauli" },
+  { name: "y", label: "Y", fullName: "Pauli Y", description: "Flips the qubit and adds a phase: a half turn about the Y axis.", arity: 1, group: "single", color: "pauli" },
+  { name: "z", label: "Z", fullName: "Pauli Z", description: "Flips the phase of 1 and leaves 0 alone.", arity: 1, group: "single", color: "pauli" },
+  { name: "s", label: "S", fullName: "S (phase)", description: "Adds a quarter-turn phase (pi/2) to 1.", arity: 1, group: "single", color: "phase" },
+  { name: "t", label: "T", fullName: "T (phase)", description: "Adds an eighth-turn phase (pi/4) to 1.", arity: 1, group: "single", color: "phase" },
+  { name: "sdg", label: "S†", fullName: "S dagger", description: "Undoes S: a phase of minus pi/2 on 1.", arity: 1, group: "single", color: "phase" },
+  { name: "tdg", label: "T†", fullName: "T dagger", description: "Undoes T: a phase of minus pi/4 on 1.", arity: 1, group: "single", color: "phase" },
+  { name: "sx", label: "√X", fullName: "Square root of X", description: "Half of an X: two in a row flip the qubit.", arity: 1, group: "single", color: "rotation" },
+  { name: "rx", label: "RX", fullName: "Rotation about X", description: "Turns the qubit about the X axis by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "ry", label: "RY", fullName: "Rotation about Y", description: "Turns the qubit about the Y axis by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "rz", label: "RZ", fullName: "Rotation about Z", description: "Changes the qubit's phase by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "cx", label: "CNOT", fullName: "Controlled NOT", description: "Flips the target qubit when the control qubit is 1. Pick the control, then the target.", arity: 2, group: "multi", color: "multi" },
+  { name: "cz", label: "CZ", fullName: "Controlled Z", description: "Flips the phase when both qubits are 1. Pick any two qubits.", arity: 2, group: "multi", color: "multi" },
+  { name: "swap", label: "SWAP", fullName: "Swap", description: "Swaps the states of two qubits.", arity: 2, group: "multi", color: "multi" },
+  { name: "measure", label: "M", fullName: "Measure", description: "Reads the qubit as 0 or 1 into the classical bit with the same number.", arity: 1, group: "other", color: "neutral" },
+  { name: "barrier", label: "Barrier", fullName: "Barrier", description: "Stops the compiler from moving gates across this point. Covers every qubit.", arity: 0, group: "other", color: "neutral" },
 ];
 
 const GATE_BY_NAME = new Map(GATES.map((g) => [g.name, g]));

@@ -1,46 +1,78 @@
 "use client";
 
 import { PREVIEW_MAX_QUBITS } from "@/lib/composer/circuit";
-import type { ProbabilityPreview } from "@/lib/composer/statevector";
+import {
+  CHART_TOP_OUTCOMES,
+  chartAxisMax,
+  probabilityChartData,
+  type ProbabilityPreview,
+} from "@/lib/composer/statevector";
 
-const MAX_BARS = 16;
+const CHART_HEIGHT = 200;
 
-// Outcome probabilities from the in-browser simulation, drawn like the
-// measurement results on a finished job (JobResultView) so the two compare
-// at a glance.
+const fmtPct = (p: number) => {
+  const pct = p * 100;
+  if (pct === 0) return "0%";
+  if (pct < 0.1) return "<0.1%";
+  return `${Number(pct.toFixed(pct < 10 ? 1 : 0))}%`;
+};
+
+// Outcome probabilities from the in-browser simulation as a vertical bar
+// chart, like qBraid's: every basis state on the x axis up to 5 bits (zeros
+// included, so you can see what can't happen), otherwise the 16 most likely
+// outcomes. Bars use the same blue as the job results.
 export default function ProbabilityPanel({
   preview,
+  bits,
   measuredMidCircuit,
 }: {
   /** Null above PREVIEW_MAX_QUBITS: the chart is replaced by a note. */
   preview: ProbabilityPreview | null;
+  /** Length of each outcome's bitstring (the circuit's qubit count). */
+  bits: number;
   /** Qubits with a gate after their measurement: the preview treats every measurement as final. */
   measuredMidCircuit: number[];
 }) {
-  if (!preview) {
-    return (
-      <section className="flex min-w-0 flex-col default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
-        <h2 className="mb-3 text-base font-semibold text-gray-900">Probabilities</h2>
-        <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-gray-500" data-preview-limit>
-          Preview is available up to {PREVIEW_MAX_QUBITS} qubits. Run the circuit to see results.
-        </p>
-      </section>
-    );
-  }
-
-  const shown = preview.outcomes.slice(0, MAX_BARS);
-  const hidden = preview.outcomes.length - shown.length;
-
   return (
-    <section className="flex min-w-0 flex-col default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
+    <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
       <div className="mb-1 flex items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-gray-900">Probabilities</h2>
         <span className="text-xs text-gray-500">Ideal simulation, no noise</span>
       </div>
+      {preview ? (
+        <Chart preview={preview} bits={bits} measuredMidCircuit={measuredMidCircuit} />
+      ) : (
+        <p className="py-10 text-center text-sm text-gray-500" data-preview-limit>
+          Preview is available up to {PREVIEW_MAX_QUBITS} qubits. Run the circuit to see results.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function Chart({
+  preview,
+  bits,
+  measuredMidCircuit,
+}: {
+  preview: ProbabilityPreview;
+  bits: number;
+  measuredMidCircuit: number[];
+}) {
+  const data = probabilityChartData(preview, bits);
+  const axisMax = chartAxisMax(Math.max(0, ...data.bars.map((b) => b.probability)));
+  const showValues = data.bars.length <= 16;
+  const verticalLabels = bits >= 3;
+
+  return (
+    <>
       <p className="mb-3 text-xs text-gray-500">
         {preview.basis === "all"
           ? "No measurements yet, so this shows every qubit."
           : "Outcomes of the measured bits, highest bit on the left."}
+        {data.mode === "top" &&
+          data.nonZero > data.bars.length &&
+          ` Showing the ${CHART_TOP_OUTCOMES} most likely of ${data.nonZero.toLocaleString()} outcomes.`}
       </p>
       {measuredMidCircuit.length > 0 && (
         <p className="mb-3 text-xs text-amber-700">
@@ -48,27 +80,57 @@ export default function ProbabilityPanel({
           came last.
         </p>
       )}
-      <div className="space-y-2">
-        {shown.map(({ outcome, probability }) => {
-          const pct = probability * 100;
-          return (
-            <div key={outcome} className="flex items-center gap-3">
-              <span className="min-w-10 shrink-0 whitespace-nowrap font-mono text-sm text-gray-700">|{outcome}⟩</span>
-              <div className="flex-1 overflow-hidden rounded bg-gray-200/70">
-                <div className="h-4 rounded bg-blue-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+
+      <div className="flex gap-2" role="img" aria-label="Outcome probabilities">
+        {/* y axis */}
+        <div className="relative w-10 shrink-0 text-right text-[10px] text-gray-500 tabular-nums" style={{ height: CHART_HEIGHT }}>
+          {[1, 0.5, 0].map((f) => (
+            <span key={f} className="absolute right-1 -translate-y-1/2" style={{ top: (1 - f) * CHART_HEIGHT }}>
+              {fmtPct(axisMax * f)}
+            </span>
+          ))}
+        </div>
+
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className="min-w-full" style={{ width: Math.max(data.bars.length * 22, 0) }}>
+            {/* plot */}
+            <div className="relative border-b border-l border-gray-300" style={{ height: CHART_HEIGHT }}>
+              {[0.5, 1].map((f) => (
+                <span key={f} className="absolute inset-x-0 border-t border-dashed border-gray-200" style={{ top: (1 - f) * CHART_HEIGHT }} />
+              ))}
+              <div className="absolute inset-0 flex items-end justify-around gap-1 px-1">
+                {data.bars.map(({ outcome, probability }) => {
+                  const h = axisMax > 0 ? (probability / axisMax) * CHART_HEIGHT : 0;
+                  return (
+                    <div
+                      key={outcome}
+                      className="relative flex h-full max-w-14 min-w-3 flex-1 flex-col items-center justify-end"
+                      title={`|${outcome}⟩ ${fmtPct(probability)}`}
+                    >
+                      {showValues && probability > 0 && (
+                        <span className="mb-0.5 text-[10px] text-gray-600 tabular-nums">{fmtPct(probability)}</span>
+                      )}
+                      <div className="w-full rounded-t bg-blue-500 transition-all duration-300" style={{ height: h }} />
+                    </div>
+                  );
+                })}
               </div>
-              <span className="w-14 shrink-0 text-right text-xs text-gray-500 tabular-nums">
-                {pct >= 0.1 || pct === 0 ? pct.toFixed(1) : "<0.1"}%
-              </span>
             </div>
-          );
-        })}
+            {/* x axis */}
+            <div className="flex justify-around gap-1 px-1 pt-1">
+              {data.bars.map(({ outcome }) => (
+                <span
+                  key={outcome}
+                  className="flex max-w-14 min-w-3 flex-1 justify-center font-mono text-[10px] text-gray-600"
+                  style={verticalLabels ? { writingMode: "vertical-rl", transform: "rotate(180deg)" } : undefined}
+                >
+                  {outcome}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
-      {hidden > 0 && (
-        <p className="mt-3 text-xs text-gray-500">
-          Showing the {MAX_BARS} most likely of {preview.outcomes.length.toLocaleString()} outcomes.
-        </p>
-      )}
-    </section>
+    </>
   );
 }
