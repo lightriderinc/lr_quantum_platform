@@ -111,7 +111,7 @@ export default function ReservationBookingModal({
               </p>
             )}
             <WarningBox>
-              This reservation is exclusive access to real Rigetti hardware — once booked, it can&apos;t be
+              This reservation gives exclusive access to real Rigetti hardware. Once booked, it can&apos;t be
               cancelled.
             </WarningBox>
             <div className="mt-5 flex justify-end gap-3">

@@ -102,8 +102,8 @@ export default function CircuitSchematic({
 
 /**
  * The submit popup's panel: draws whichever template circuit is selected,
- * then its name, description, the result to expect and, for Haar random
- * circuits, the angles drawn this time.
+ * then its name, description and, for Haar random circuits, the angles
+ * drawn this time.
  */
 export function TemplateSchematic({
   template,
@@ -127,9 +127,6 @@ export function TemplateSchematic({
       <div className="text-center">
         <p className="text-sm font-semibold text-gray-700">{template.name}</p>
         <p className="text-xs text-gray-500">{template.description}</p>
-        <p className="mt-2 text-xs font-medium text-gray-700" data-expect>
-          {built.expect}
-        </p>
         {built.angles && (
           <div className="mt-2 space-y-0.5 font-mono text-[11px] text-gray-500" data-angles>
             {built.angles.map((a) => (

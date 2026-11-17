@@ -26,7 +26,7 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
         <p className="text-sm text-red-500">
           {quoteError instanceof Error && quoteError.message
             ? quoteError.message
-            : "Couldn't get a price for this job. Please try again."}
+            : "Couldn't get a price. Try again."}
         </p>
       )}
 
@@ -69,11 +69,11 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
         <p className="text-sm text-red-500">
           {submitError instanceof Error && submitError.message
             ? submitError.message
-            : "Failed to submit job. Please try again."}
+            : "Couldn't submit the job. Try again."}
         </p>
       )}
 
-      {needsCredits && <WarningBox>Submitting circuits to QPUs will cost you credits</WarningBox>}
+      {needsCredits && <WarningBox>QPU jobs cost credits</WarningBox>}
     </>
   );
 }

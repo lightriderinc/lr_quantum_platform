@@ -54,8 +54,7 @@ export default function DashboardLatestJobs() {
         </h3>
         <div className="mb-4">
           <span>
-            The latest jobs you submit will appear here. You can track their
-            status and view results once they complete.
+            Your latest jobs will appear here.
           </span>
         </div>
 

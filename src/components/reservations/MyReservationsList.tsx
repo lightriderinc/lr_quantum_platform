@@ -181,7 +181,7 @@ export default function MyReservationsList() {
       {showSubmit && (
         <BackendSubmitModal
           backend="rigetti-cepheus"
-          title="Submit a job to your reserved Cepheus-1-108Q window"
+          title="Submit a job to your reserved Rigetti Cepheus-1-108Q window"
           onClose={() => setShowSubmit(false)}
         />
       )}

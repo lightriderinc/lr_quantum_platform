@@ -46,8 +46,8 @@ export default function CepheusReservationTab({
   return (
     <div className="flex flex-col gap-8">
       <p className="max-w-2xl text-sm leading-relaxed text-gray-600">
-        Book a guaranteed time slot on Rigetti Cepheus-1-108Q QPU for exclusive
-        access during your window.
+        Book a time slot for exclusive access to the Rigetti Cepheus-1-108Q
+        QPU.
       </p>
 
       <div>
@@ -62,13 +62,13 @@ export default function CepheusReservationTab({
           <h2 className="text-lg font-semibold text-gray-800">Book a slot</h2>
           {justBooked ? (
             <p className="text-sm text-gray-600">
-              Reservation confirmed — see it under &quot;My reservations&quot;.
+              Reservation confirmed. See it under &quot;My reservations&quot;.
             </p>
           ) : (
             <>
               <p className="mb-4 text-sm text-gray-500">
-                Booking slots are available in 15-minute increments, with 30-
-                and 60-minute windows consisting of consecutive blocks.
+                Slots are 15 minutes long. A 30 or 60 minute booking uses
+                consecutive slots.
               </p>
               <ReservationDurationSelector
                 duration={duration}

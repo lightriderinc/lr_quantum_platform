@@ -158,11 +158,11 @@ export default function Composer({
 
   const hint = pending
     ? pending.name === "cx"
-      ? `Now click the target qubit in the same step (control is q[${pending.first}]).`
-      : `Now click the second qubit in the same step (first is q[${pending.first}]).`
+      ? `Click the target qubit in the same step (control is q[${pending.first}]).`
+      : `Click the second qubit in the same step (first is q[${pending.first}]).`
     : tool
-      ? `Click a spot on a qubit line to place ${gateDef(tool).label}, or drag it there.`
-      : "Pick a gate, then click a spot on a qubit line. You can also drag gates onto the grid, and drag placed gates to move them.";
+      ? `Click a qubit line to place ${gateDef(tool).label}.`
+      : "Pick a gate, then click a qubit line. Drag gates to place or move them.";
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -220,7 +220,7 @@ export default function Composer({
               <MdAdd />
             </button>
             <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
-            <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every qubit that isn't measured yet">
+            <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every unmeasured qubit">
               <MdPlaylistAddCheck /> Measure all
             </button>
             <TemplatesMenu

@@ -17,7 +17,7 @@ export default function DashboardDemoCircuit() {
           </h3>
           <div className="flex text-left">
             <p className="text-sm text-gray-500">
-              Submit a sample circuit to IQM Garnet simulator.
+              Submit a sample circuit to the IQM Garnet simulator.
             </p>
           </div>
         </div>

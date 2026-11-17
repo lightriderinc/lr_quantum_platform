@@ -24,16 +24,16 @@ const UPDATES: Update[] = [
     href: "/backends/rigetti-cepheus-1-108q?tab=experiments",
     color: "lime",
     date: "2026-09-15",
-    title: "Experiments available on Cepheus-1-108Q",
+    title: "Experiments available on Rigetti Cepheus-1-108Q",
     description:
-      "Experiments are specific use-cases designed to help you explore the unique capabilities of the device and understand how to best utilize it for your applications.",
+      "Ready-made experiments that show what the device can do and how to use it.",
   },
   {
     href: "/backends/rigetti-cepheus-1-108q",
     color: "purple",
     date: "2026-08-27",
     title: "Rigetti Cepheus-1-108Q Live",
-    description: "Rigetti's 108-qubit quantum processor is now available for access from the platform and SDK.",
+    description: "Rigetti's 108-qubit quantum processor is now available on the platform and SDK.",
   },
 ];
 

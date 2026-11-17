@@ -176,7 +176,7 @@ function mapMachine(
     queueDepth,
     availability,
     details: {
-      description: `${name} is a ${kind}, with calibration data pulled live from IQM Resonance.`,
+      description: `${name} is a ${kind}.`,
       nativeGates: metrics ? nativeGates : undefined,
       qubitMap,
       medianOneQubitFidelity: asPercent(

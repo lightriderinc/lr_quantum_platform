@@ -107,7 +107,6 @@ describe("circuit templates", () => {
     }
     // theta = arccos(1 - 2u), so P(1) = u.
     expect(probabilityOfOne(haarAngles(0, () => 0.3))).toBeCloseTo(0.3, 10);
-    expect(built.expect).toMatch(/^Expect q0 to read 1 about \d+% of the time and q1 about \d+%\.$/);
   });
 
   test("new random angles on each build", () => {

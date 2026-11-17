@@ -110,7 +110,7 @@ function mapProcessor(id: string, isa: RigettiISA): Backend {
     provider: "Rigetti",
     queueDepth: null,
     details: {
-      description: `${name} is a superconducting quantum processor${arch?.family ? ` (Rigetti ${arch.family} family)` : ""}, with calibration data pulled live from Rigetti QCS.`,
+      description: `${name} is a superconducting quantum processor${arch?.family ? ` (Rigetti ${arch.family} family)` : ""}.`,
       topology: arch?.family,
       nativeGates: (isa.instructions ?? []).map((o) => o.name),
       qubitMap,
@@ -154,7 +154,7 @@ function mockBackend(): Backend {
     provider: "Rigetti",
     queueDepth: null,
     details: {
-      description: `${name} is a noise-model simulator of the real Cepheus-1-108Q device, always free and unlimited.`,
+      description: `${name} is a noise-model simulator of Rigetti Cepheus-1-108Q. Free and unlimited.`,
     },
   };
 }

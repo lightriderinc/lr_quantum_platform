@@ -68,7 +68,7 @@ function Chart({
     <>
       <p className="mb-3 text-xs text-gray-500">
         {preview.basis === "all"
-          ? "No measurements yet, so this shows every qubit."
+          ? "No measurements yet. Showing every qubit."
           : "Outcomes of the measured bits, highest bit on the left."}
         {data.mode === "top" &&
           data.nonZero > data.bars.length &&
@@ -76,8 +76,7 @@ function Chart({
       </p>
       {measuredMidCircuit.length > 0 && (
         <p className="mb-3 text-xs text-amber-700">
-          Qubit {measuredMidCircuit.join(", ")} has gates after its measurement. The preview treats every measurement as if it
-          came last.
+          Qubit {measuredMidCircuit.join(", ")} has gates after its measurement. The preview treats every measurement as final.
         </p>
       )}
 

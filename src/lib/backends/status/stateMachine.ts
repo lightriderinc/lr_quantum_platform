@@ -142,7 +142,7 @@ function applyReadingToCounters(
       m.lastUnhealthyAt = now;
       m.unhealthyReason =
         kind === "not_listed"
-          ? `No longer available to Light Rider's ${provider} account.`
+          ? `${provider} no longer lists this machine.`
           : `${provider} reports this machine as unhealthy.`;
       m.unreachableSince = null;
       return;
@@ -226,7 +226,7 @@ function decide(
   ) {
     return {
       state: "unreachable",
-      reason: `${provider} hasn't answered Light Rider's status checks.`,
+      reason: `${provider} isn't responding to status checks.`,
     };
   }
 
@@ -244,7 +244,7 @@ function checkingReason(
       return `Confirming ${provider}'s healthy reading.`;
     case "unhealthy":
     case "not_listed":
-      return `${provider} reported a problem. Confirming before showing Offline.`;
+      return `${provider} reported a problem. Checking again.`;
     case "stuck":
       return `${provider}'s health data has stopped updating.`;
     case "transport_error":
@@ -253,6 +253,6 @@ function checkingReason(
         : `Waiting for ${provider} to answer a status check.`;
     case "auth_error":
     case "schema_error":
-      return `Light Rider can't verify this machine's status with ${provider} right now.`;
+      return `Can't verify this machine's status with ${provider} right now.`;
   }
 }

@@ -80,7 +80,7 @@ export default function ExperimentsPageClient({
         >
           Log in
         </button>{" "}
-        to run experiments on Cepheus.
+        to run experiments on Rigetti Cepheus-1-108Q.
       </p>
     );
   }

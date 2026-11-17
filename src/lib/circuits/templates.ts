@@ -22,11 +22,9 @@ export interface HaarAngles {
   lambda: number;
 }
 
-/** A circuit ready to submit, with what to expect from it. */
+/** A circuit ready to submit. */
 export interface BuiltCircuit {
   payload: QuantumCircuitPayload;
-  /** One line on the result to expect, e.g. "Expect 11 almost every time." */
-  expect: string;
   /** The random angles, for Haar random circuits. */
   angles?: HaarAngles[];
 }
@@ -98,8 +96,6 @@ export function probabilityOfOne(a: HaarAngles): number {
   return Math.sin(a.theta / 2) ** 2;
 }
 
-const pct = (p: number) => `${Math.round(p * 100)}%`;
-
 function haarGates(angles: HaarAngles[]): QuantumCircuitInstruction[] {
   return angles.flatMap((a) => [rz(a.qubit, a.lambda), ry(a.qubit, a.theta), rz(a.qubit, a.phi)]);
 }
@@ -126,7 +122,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     numQubits: 1,
     build: () => ({
       payload: payload("superposition", 1, [h(0)]),
-      expect: "Expect 0 and 1 about half the time each.",
     }),
   },
   {
@@ -137,7 +132,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     numQubits: 2,
     build: () => ({
       payload: payload("bell", 2, [h(0), cx(0, 1)]),
-      expect: "Expect 00 and 11 about half the time each, never 01 or 10.",
     }),
   },
   {
@@ -148,7 +142,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     numQubits: 3,
     build: () => ({
       payload: ghzPayload(3),
-      expect: "Expect 000 and 111 about half the time each.",
     }),
   },
   {
@@ -161,7 +154,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
       const angles = haarFor(1, options);
       return {
         payload: payload("haar-random-1", 1, haarGates(angles)),
-        expect: `Expect 1 about ${pct(probabilityOfOne(angles[0]))} of the time.`,
         angles,
       };
     },
@@ -176,7 +168,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
       const angles = haarFor(2, options);
       return {
         payload: payload("haar-random-2", 2, haarGates(angles)),
-        expect: `Expect q0 to read 1 about ${pct(probabilityOfOne(angles[0]))} of the time and q1 about ${pct(probabilityOfOne(angles[1]))}.`,
         angles,
       };
     },
@@ -189,7 +180,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     numQubits: 4,
     build: () => ({
       payload: payload("random-numbers", 4, range(4).map(h)),
-      expect: "Expect all 16 numbers from 0000 to 1111, each about 1 in 16 times.",
     }),
   },
   {
@@ -201,7 +191,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
     build: () => ({
       // Oracle (CZ marks |11>), then the diffuser: H H, X X, CZ, X X, H H.
       payload: payload("grover-11", 2, [h(0), h(1), cz(0, 1), h(0), h(1), x(0), x(1), cz(0, 1), x(0), x(1), h(0), h(1)]),
-      expect: "Expect 11 almost every time.",
     }),
   },
   {
@@ -221,7 +210,6 @@ export const CIRCUIT_TEMPLATES: CircuitTemplate[] = [
           [x(ancilla), h(ancilla), ...data.map(h), ...oracle, ...data.map(h)],
           data,
         ),
-        expect: `Expect ${BV_SECRET} almost every time.`,
       };
     },
   },

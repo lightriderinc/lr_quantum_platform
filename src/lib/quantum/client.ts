@@ -99,7 +99,7 @@ export async function fetchJobPrice(
 export class BackendBusyError extends Error {
   constructor(public nextAvailableAt: string, deviceLabel: string) {
     super(
-      `${deviceLabel} is busy right now. Next available at ${new Date(nextAvailableAt).toLocaleString()}.`,
+      `${deviceLabel} is busy. Next available at ${new Date(nextAvailableAt).toLocaleString()}.`,
     );
     this.name = "BackendBusyError";
   }
@@ -144,7 +144,8 @@ export async function submitQuantumJob(
   if (res.status === 503) {
     const data = await res.json().catch(() => ({}));
     if (data.error === "busy" && typeof data.nextAvailableAt === "string") {
-      throw new BackendBusyError(data.nextAvailableAt, QUANTUM_BACKENDS[backend].deviceInstance);
+      const label = backend === "rigetti-cepheus" ? "Rigetti Cepheus-1-108Q" : QUANTUM_BACKENDS[backend].deviceInstance;
+      throw new BackendBusyError(data.nextAvailableAt, label);
     }
   }
   if (!res.ok) {

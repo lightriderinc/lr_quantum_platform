@@ -121,8 +121,7 @@ export default function JobsList() {
         </h3>
         <div className="mb-6">
           <span>
-            Jobs you submit will appear here. You can track their status and
-            view results once they complete.
+            Jobs you submit will appear here.
           </span>
         </div>
 

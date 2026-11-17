@@ -200,8 +200,8 @@ export default function BackendModal({
             <h2 className="mb-3 text-base font-semibold">Qubit map</h2>
             {backend.id === "rigetti.qpu.Cepheus-1-108Q" && (
               <InfoBox>
-                The following qubit map shows a simplified representation for Rigetti Cepheus 1-108Q. <br />
-                For accurate and more detailed information, please visit the device&apos;s{" "}
+                This qubit map is simplified. <br />
+                For full details, see the{" "}
                 <Link
                   href="/backends/rigetti-cepheus-1-108q?tab=topology"
                   className="underline text-blue-700 font-medium hover:text-[var(--brand-primary)]"

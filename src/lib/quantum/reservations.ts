@@ -36,7 +36,7 @@ export const RESERVED_CEPHEUS_BACKEND_CARD: Backend = {
   queueDepth: null,
   details: {
     description:
-      "Book a guaranteed time slot on the real Cepheus-1-108Q QPU — pay upfront for exclusive access during your window, instead of best-effort submission whenever the device happens to be free.",
+      "Book a time slot for exclusive access to the Rigetti Cepheus-1-108Q QPU. You pay upfront.",
   },
 };
 

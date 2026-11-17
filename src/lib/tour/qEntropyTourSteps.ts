@@ -13,7 +13,7 @@ export const Q_ENTROPY_TOUR_STEPS: DriveStep[] = [
     popover: {
       title: "Select one or more chiplets",
       description:
-        "Click chiplets in the grid (Cepheus's 12-chiplet array) to add them to your withdrawal.",
+        "Click chiplets in the grid (the 12-chiplet array of Rigetti Cepheus-1-108Q) to add them to your withdrawal.",
     },
   },
   {

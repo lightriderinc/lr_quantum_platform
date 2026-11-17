@@ -46,23 +46,23 @@ export interface GateDef {
 }
 
 export const GATES: GateDef[] = [
-  { name: "h", label: "H", fullName: "Hadamard", description: "Puts the qubit in a 50/50 superposition of 0 and 1.", arity: 1, group: "single", color: "pauli" },
-  { name: "x", label: "X", fullName: "Pauli X", description: "Flips 0 to 1 and 1 to 0, like a classical NOT.", arity: 1, group: "single", color: "pauli" },
-  { name: "y", label: "Y", fullName: "Pauli Y", description: "Flips the qubit and adds a phase: a half turn about the Y axis.", arity: 1, group: "single", color: "pauli" },
-  { name: "z", label: "Z", fullName: "Pauli Z", description: "Flips the phase of 1 and leaves 0 alone.", arity: 1, group: "single", color: "pauli" },
-  { name: "s", label: "S", fullName: "S (phase)", description: "Adds a quarter-turn phase (pi/2) to 1.", arity: 1, group: "single", color: "phase" },
-  { name: "t", label: "T", fullName: "T (phase)", description: "Adds an eighth-turn phase (pi/4) to 1.", arity: 1, group: "single", color: "phase" },
-  { name: "sdg", label: "S†", fullName: "S dagger", description: "Undoes S: a phase of minus pi/2 on 1.", arity: 1, group: "single", color: "phase" },
-  { name: "tdg", label: "T†", fullName: "T dagger", description: "Undoes T: a phase of minus pi/4 on 1.", arity: 1, group: "single", color: "phase" },
-  { name: "sx", label: "√X", fullName: "Square root of X", description: "Half of an X: two in a row flip the qubit.", arity: 1, group: "single", color: "rotation" },
-  { name: "rx", label: "RX", fullName: "Rotation about X", description: "Turns the qubit about the X axis by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
-  { name: "ry", label: "RY", fullName: "Rotation about Y", description: "Turns the qubit about the Y axis by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
-  { name: "rz", label: "RZ", fullName: "Rotation about Z", description: "Changes the qubit's phase by the angle you set.", arity: 1, angle: true, group: "rotation", color: "rotation" },
-  { name: "cx", label: "CNOT", fullName: "Controlled NOT", description: "Flips the target qubit when the control qubit is 1. Pick the control, then the target.", arity: 2, group: "multi", color: "multi" },
-  { name: "cz", label: "CZ", fullName: "Controlled Z", description: "Flips the phase when both qubits are 1. Pick any two qubits.", arity: 2, group: "multi", color: "multi" },
-  { name: "swap", label: "SWAP", fullName: "Swap", description: "Swaps the states of two qubits.", arity: 2, group: "multi", color: "multi" },
-  { name: "measure", label: "M", fullName: "Measure", description: "Reads the qubit as 0 or 1 into the classical bit with the same number.", arity: 1, group: "other", color: "neutral" },
-  { name: "barrier", label: "Barrier", fullName: "Barrier", description: "Stops the compiler from moving gates across this point. Covers every qubit.", arity: 0, group: "other", color: "neutral" },
+  { name: "h", label: "H", fullName: "Hadamard", description: "equal superposition of 0 and 1", arity: 1, group: "single", color: "pauli" },
+  { name: "x", label: "X", fullName: "Pauli X", description: "bit flip, like a classical NOT", arity: 1, group: "single", color: "pauli" },
+  { name: "y", label: "Y", fullName: "Pauli Y", description: "bit and phase flip, a half turn about Y", arity: 1, group: "single", color: "pauli" },
+  { name: "z", label: "Z", fullName: "Pauli Z", description: "phase flip on 1", arity: 1, group: "single", color: "pauli" },
+  { name: "s", label: "S", fullName: "S (phase)", description: "phase of pi/2 on 1", arity: 1, group: "single", color: "phase" },
+  { name: "t", label: "T", fullName: "T (phase)", description: "phase of pi/4 on 1", arity: 1, group: "single", color: "phase" },
+  { name: "sdg", label: "S†", fullName: "S dagger", description: "inverse of S, phase of -pi/2 on 1", arity: 1, group: "single", color: "phase" },
+  { name: "tdg", label: "T†", fullName: "T dagger", description: "inverse of T, phase of -pi/4 on 1", arity: 1, group: "single", color: "phase" },
+  { name: "sx", label: "√X", fullName: "Square root of X", description: "half an X, two in a row make X", arity: 1, group: "single", color: "rotation" },
+  { name: "rx", label: "RX", fullName: "Rotation about X", description: "turns by the set angle", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "ry", label: "RY", fullName: "Rotation about Y", description: "turns by the set angle", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "rz", label: "RZ", fullName: "Rotation about Z", description: "phase change by the set angle", arity: 1, angle: true, group: "rotation", color: "rotation" },
+  { name: "cx", label: "CNOT", fullName: "Controlled NOT", description: "flips the target when the control is 1", arity: 2, group: "multi", color: "multi" },
+  { name: "cz", label: "CZ", fullName: "Controlled Z", description: "phase flip when both qubits are 1", arity: 2, group: "multi", color: "multi" },
+  { name: "swap", label: "SWAP", fullName: "Swap", description: "swaps two qubit states", arity: 2, group: "multi", color: "multi" },
+  { name: "measure", label: "M", fullName: "Measure", description: "reads 0 or 1 into the classical bit of the same index", arity: 1, group: "other", color: "neutral" },
+  { name: "barrier", label: "Barrier", fullName: "Barrier", description: "blocks gate reordering across it, on every qubit", arity: 0, group: "other", color: "neutral" },
 ];
 
 const GATE_BY_NAME = new Map(GATES.map((g) => [g.name, g]));
@@ -244,7 +244,7 @@ export function runBlockers(
   const reasons: string[] = [];
   const stats = circuitStats(circuit);
   if (stats.gates === 0 && stats.measurements === 0) reasons.push("Add at least one gate.");
-  if (stats.measurements === 0) reasons.push("Add a measurement. Results only include measured qubits.");
+  if (stats.measurements === 0) reasons.push("Add a measurement.");
   if (backend.qubits < circuit.numQubits) {
     reasons.push(`${backend.name} has ${backend.qubits} qubits and this circuit uses ${circuit.numQubits}.`);
   }
@@ -252,7 +252,7 @@ export function runBlockers(
     const late = gatesAfterMeasure(circuit);
     if (late.length > 0) {
       reasons.push(
-        `IonQ measures every qubit once, at the end. Move the gates after the measurement on qubit ${late.join(", ")}.`,
+        `IonQ measures only at the end. Move the gates after the measurement on qubit ${late.join(", ")}.`,
       );
     }
   }

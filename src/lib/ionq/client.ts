@@ -53,7 +53,7 @@ const IONQ_DEVICES: IonqDevice[] = [
     type: "QPU",
     qubits: 36,
     description:
-      "IonQ Forte-1 is a trapped-ion quantum computer with all-to-all connectivity. Priced per job: you see the price in credits before you submit.",
+      "Trapped-ion quantum computer with all-to-all connectivity. Priced per job: you confirm the price in credits before you submit.",
     ionqCloud: true,
   },
   {
@@ -63,7 +63,7 @@ const IONQ_DEVICES: IonqDevice[] = [
     type: "QPU",
     qubits: 36,
     description:
-      "IonQ Forte Enterprise-1 is a trapped-ion quantum computer with all-to-all connectivity. Priced per job: you see the price in credits before you submit.",
+      "Trapped-ion quantum computer with all-to-all connectivity. Priced per job: you confirm the price in credits before you submit.",
     ionqCloud: true,
   },
 ];
@@ -93,7 +93,7 @@ function liveStatus(entry: IonqBackendStatus | undefined): { status: BackendStat
       return entry.degraded
         ? {
             status: "online",
-            statusInfo: { label: "Degraded", reason: "IonQ reports this system as degraded, so jobs may run slower than usual." },
+            statusInfo: { label: "Degraded", reason: "IonQ reports this system as degraded. Jobs may run slower than usual." },
           }
         : { status: "online" };
     case "unavailable":

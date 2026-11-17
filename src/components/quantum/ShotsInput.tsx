@@ -12,7 +12,7 @@ export default function ShotsInput({ value, onChange }: Props) {
     <div>
       <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700">
         Shots
-        <HintIcon text="The number of times the circuit is executed. The more shots you use the higher the accuracy of your results." />
+        <HintIcon text="Number of times the circuit runs. More shots give more accurate results." />
       </label>
       <input
         type="number"

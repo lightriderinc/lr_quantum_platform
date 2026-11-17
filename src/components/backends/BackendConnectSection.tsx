@@ -210,7 +210,7 @@ export default function BackendConnectSection({
     return (
       <>
         <p className="mt-3 mb-6 text-sm text-gray-600">
-          Simulators run without an API key — see the{" "}
+          Simulators run without an API key. See the{" "}
           <a
             href="https://docs.lightriderinc.com/platform/sdk/getting-started.html"
             target="_blank"
@@ -243,7 +243,7 @@ export default function BackendConnectSection({
   if (!quantumBackendId) {
     return (
       <p className="mt-3 text-sm text-gray-600">
-        This backend isn&apos;t available for direct API submission yet.
+        This backend isn&apos;t available through the API yet.
       </p>
     );
   }
@@ -275,10 +275,9 @@ export default function BackendConnectSection({
       </p>
       {isReservedOnlyBackend && (
         <InfoBox>
-          Submitting jobs to Rigetti Cepheus 1-108Q is only possible in reserved
-          time slots.
+          Rigetti Cepheus-1-108Q only runs jobs during a reserved time slot.
           <br />
-          To view free slots and book a reservation, visit the{" "}
+          Book a slot on the{" "}
           <Link
             href="/backends/rigetti-cepheus-1-108q?tab=reservation"
             className="underline font-medium text-blue-700 hover:text-[var(--brand-primary)]"

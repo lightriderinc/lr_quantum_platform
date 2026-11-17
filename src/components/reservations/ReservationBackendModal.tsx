@@ -89,7 +89,7 @@ export default function ReservationBackendModal({
         {tab === "book" &&
           (justBooked ? (
             <div className="default-radius border border-dashed border-green-200 bg-green-50 p-6 text-center text-sm text-green-700">
-              Reservation confirmed — see it under &quot;My reservations&quot;.
+              Reservation confirmed. See it under &quot;My reservations&quot;.
             </div>
           ) : (
             <div className="flex flex-col gap-4">
