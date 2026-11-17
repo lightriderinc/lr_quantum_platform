@@ -1,7 +1,13 @@
 "use client";
 
 import { fetchJson, type Credits } from "@/components/billing/CreditsSummary";
-import { isPaidBackend, isPricedPerJob, type QuantumBackendId } from "@/lib/quantum/backends";
+import {
+  isPaidBackend,
+  isPricedPerJob,
+  isPricedPerShot,
+  perShotPriceCredits,
+  type QuantumBackendId,
+} from "@/lib/quantum/backends";
 import {
   fetchJobPrice,
   fetchQuantumJobDetail,
@@ -24,6 +30,9 @@ import { useState } from "react";
 //   - Per-job priced backends (IonQ Forte) get a price first ("Get price"),
 //     then the submit carries the confirmed price; the server re-quotes and
 //     never charges more.
+//   - Per-shot paid backends (IQM, Rigetti) submit in one click, with the
+//     price on the button ("Submit Job (N credits)"): shots times the rate,
+//     the same function the server charges with.
 //   - A backend that's normally free but has a price right now (the IonQ
 //     noisy simulator with IONQ_NOISY_SIM_PRICE_PER_SHOT_USD) answers the
 //     first submit with a price to confirm; nothing is charged until then.
@@ -55,7 +64,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
   const pricedPerJob = isPricedPerJob(backend);
 
   const [quoteState, setQuoteState] = useState<{ key: string; quote: JobPriceQuote; notice: string | null } | null>(null);
-  const quote = quoteState?.key === key ? quoteState.quote : null;
+  const pricedPerShot = isPricedPerShot(backend);
   const priceNotice = quoteState?.key === key ? quoteState.notice : null;
   const [submittedJob, setSubmittedJob] = useState<Job | null>(null);
 
@@ -64,6 +73,9 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     queryFn: () => fetchJson<Credits>("/api/billing/credits"),
     enabled: needsCredits,
   });
+  // Per-shot price, known without asking the server; shown on the button.
+  const perShotPrice = pricedPerShot && Number.isInteger(shots) && shots > 0 ? perShotPriceCredits(backend, shots) : null;
+  const quote = quoteState?.key === key ? quoteState.quote : null;
   const blockedByCredits =
     needsCredits && credits !== undefined && (!credits.hasUnlocked || credits.remainingCents <= 0);
   const stillCheckingCredits = needsCredits && credits === undefined;
@@ -78,11 +90,14 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
       // The server re-quoted higher than what was confirmed: show the new
       // price and ask again. Nothing was charged or sent.
       if (err instanceof PriceChangedError) {
-        setQuoteState((prev) =>
-          prev?.key === vars.key
-            ? { key: vars.key, quote: { ...prev.quote, priceCredits: err.priceCredits }, notice: err.message }
-            : prev,
-        );
+        setQuoteState((prev) => ({
+          key: vars.key,
+          quote: {
+            ...(prev?.key === vars.key ? prev.quote : { balanceCredits: credits?.remainingCents ?? 0 }),
+            priceCredits: err.priceCredits,
+          },
+          notice: err.message,
+        }));
         submitMutation.reset();
       }
       if (err instanceof PriceConfirmationRequiredError) {
@@ -132,7 +147,9 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     : null;
 
   const balanceCredits = credits?.remainingCents ?? quote?.balanceCredits ?? null;
-  const priceAboveBalance = !!quote && balanceCredits !== null && quote.priceCredits > balanceCredits;
+  // The price this job will be charged: a confirmed quote, or the per-shot price.
+  const priceCredits = quote?.priceCredits ?? perShotPrice;
+  const priceAboveBalance = priceCredits !== null && balanceCredits !== null && priceCredits > balanceCredits;
 
   // Errors belong to the job they were about; an edit hides them.
   const quoteError = quoteMutation.variables?.key === key ? quoteMutation.error : null;
@@ -145,7 +162,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
       quoteMutation.mutate(vars);
       return;
     }
-    if (quote && priceAboveBalance) return;
+    if (priceAboveBalance) return;
     submitMutation.mutate({ ...vars, confirmedPriceCredits: quote?.priceCredits });
   }
 
@@ -168,11 +185,15 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     priceNotice,
     balanceCredits,
     priceAboveBalance,
+    /** Per-shot paid backends (IQM, Rigetti): the price shown on the button; null otherwise. */
+    perShotPrice,
+    /** The price this job will be charged, when known: a confirmed quote or the per-shot price. */
+    priceCredits,
     quoteError,
     submitError,
     isQuoting,
     isSubmitting,
-    canSubmit: !isSubmitting && !isQuoting && !(quote && priceAboveBalance),
+    canSubmit: !isSubmitting && !isQuoting && !priceAboveBalance,
     submitLabel:
       pricedPerJob && !quote
         ? isQuoting
@@ -182,7 +203,9 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
           ? "Submitting…"
           : quote
             ? `Confirm and submit (${quote.priceCredits.toLocaleString()} credits)`
-            : "Submit Job",
+            : perShotPrice !== null
+              ? `Submit Job (${perShotPrice.toLocaleString()} credits)`
+              : "Submit Job",
     submittedJob,
     displayedJob,
     submit,

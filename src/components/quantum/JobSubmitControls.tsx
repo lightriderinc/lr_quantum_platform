@@ -15,6 +15,7 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
     priceNotice,
     balanceCredits,
     priceAboveBalance,
+    perShotPrice,
     quoteError,
     submitError,
     needsCredits,
@@ -60,6 +61,25 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
           ) : (
             <p className="mt-3 text-gray-500">
               The price is charged when you submit. It is not adjusted after the job runs.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Per-shot paid backends (IQM, Rigetti): the price is on the submit button; the balance sits above it. */}
+      {perShotPrice !== null && !quote && balanceCredits !== null && (
+        <div className="text-sm" data-balance>
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-600">Your balance</span>
+            <span className="text-gray-900">{balanceCredits.toLocaleString()} credits</span>
+          </div>
+          {priceAboveBalance && (
+            <p className="mt-2 text-red-600" data-price-blocked>
+              You need {perShotPrice.toLocaleString()} credits for this job but have {balanceCredits.toLocaleString()}.{" "}
+              <Link href="/settings/manage-credits/purchase" className="brand-link">
+                Buy credits
+              </Link>{" "}
+              to submit it.
             </p>
           )}
         </div>

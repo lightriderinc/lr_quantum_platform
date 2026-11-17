@@ -225,6 +225,65 @@ describe("IonQ Forte: priced per job, charged before the job is sent", () => {
   });
 });
 
+describe("per-shot paid QPUs (IQM, Rigetti): one click, no price confirmation", () => {
+  // 1000 shots at 0.2 credits a shot = 200 credits.
+  test.each([
+    ["iqm-garnet", "garnet"],
+    ["rigetti-cepheus", "Cepheus-1-108Q"],
+  ])("%s without confirmedPriceCredits: sent, then charged shots times the rate", async (backend, device) => {
+    const r = await submit({ backend, circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(200);
+    expect(state.calls).toEqual(["fetch /jobs", `device ${device}`, "decrement"]);
+    expect(state.balance).toBe(10_000 - 200);
+    expect(state.ledger).toEqual([{ amountCents: -200, reason: `quantum_job:${backend}` }]);
+    expect(state.jobs[0]).toMatchObject({ backend, costCents: 200, shots: 1000 });
+  });
+
+  test("a confirmedPriceCredits sent anyway is ignored: no 409, charged the server's price", async () => {
+    const r = await submit({ backend: "iqm-garnet", circuit: CIRCUIT, shots: 1000, confirmedPriceCredits: 100 });
+    expect(r.status).toBe(200);
+    expect(state.ledger).toEqual([{ amountCents: -200, reason: "quantum_job:iqm-garnet" }]);
+  });
+
+  test("purchase gate and balance check still apply", async () => {
+    state.unlocked = false;
+    let r = await submit({ backend: "rigetti-cepheus", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toBe("purchase_required");
+
+    state.unlocked = true;
+    state.balance = 150;
+    r = await submit({ backend: "rigetti-cepheus", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(402);
+    expect(r.body.error).toBe("insufficient_credits");
+    expect(state.calls).toEqual([]);
+    expect(state.balance).toBe(150);
+  });
+
+  test.each([
+    ["iqm-garnet-mock", "garnet:mock"],
+    ["rigetti-cepheus-mock", "rigetti:mock"],
+    ["ionq-simulator", "ionq:mock"],
+  ])("free simulator %s: one click, nothing charged", async (backend, device) => {
+    const r = await submit({ backend, circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(200);
+    expect(state.calls).toEqual(["fetch /jobs", `device ${device}`]);
+    expect(state.ledger).toEqual([]);
+  });
+
+  test("estimate route prices them with the same function", async () => {
+    const { POST } = await import("../estimate/route");
+    const res = await POST(
+      new Request("http://app.test/api/lr/quantum/estimate", {
+        method: "POST",
+        body: JSON.stringify({ backend: "iqm-emerald", circuit: CIRCUIT, shots: 333 }),
+      }),
+    );
+    expect(await res.json()).toEqual({ backend: "iqm-emerald", shots: 333, priceCredits: 67, balanceCredits: 10_000 });
+    expect(state.calls).toEqual([]);
+  });
+});
+
 describe("estimate route", () => {
   test("prices a Forte job with its minimum; returns only credits, never IonQ's USD or the markup", async () => {
     const { POST } = await import("../estimate/route");

@@ -5,7 +5,13 @@ import { db } from "@/lib/billing/db";
 import { grantReferralRewardIfEligible } from "@/lib/billing/referrals";
 import { canUseIonqQpu } from "@/lib/quantum/ionqAccess";
 import { IONQ_NOISY_SIM_BACKEND, IonqQuoteError, noisySimPriceCredits, quoteIonqJob } from "@/lib/quantum/ionqPricing";
-import { isPricedPerJob, isValidBackend, QUANTUM_BACKENDS, type QuantumBackendId } from "@/lib/quantum/backends";
+import {
+  isPricedPerJob,
+  isValidBackend,
+  perShotPriceCredits,
+  QUANTUM_BACKENDS,
+  type QuantumBackendId,
+} from "@/lib/quantum/backends";
 import type { Customer } from "@prisma/client";
 import { NextResponse } from "next/server";
 
@@ -81,9 +87,9 @@ export async function POST(req: Request) {
   }
 
   const config = QUANTUM_BACKENDS[backend];
-  // Ceil to the nearest whole credit: costPerShotCents can be fractional
-  // (e.g. 0.2), but costCents/amountCents are Int columns in the DB.
-  const costCents = Math.ceil((shots ?? 1) * config.costPerShotCents);
+  // Whole credits (costCents/amountCents are Int columns); the same function
+  // the submit popups and composer use to show the price.
+  const costCents = perShotPriceCredits(backend, shots ?? 1);
 
   // Real QPU access (any backend that actually costs credits) requires
   // having purchased credits at least once — the free signup grant alone
@@ -258,27 +264,8 @@ async function submitWithConfirmedPrice(
     throw err;
   }
 
-  if (typeof confirmedPriceCredits !== "number" || !Number.isFinite(confirmedPriceCredits)) {
-    return NextResponse.json(
-      {
-        error: "price_confirmation_required",
-        priceCredits,
-        balanceCredits: customer.creditsBalanceCents,
-        message: `This job costs ${priceCredits} credits; resubmit with confirmedPriceCredits: ${priceCredits} to run it.`,
-      },
-      { status: 409 },
-    );
-  }
-  if (priceCredits > confirmedPriceCredits) {
-    return NextResponse.json(
-      {
-        error: "price_changed",
-        priceCredits,
-        message: `The price for this job is now ${priceCredits} credits. Review the new price and confirm again.`,
-      },
-      { status: 409 },
-    );
-  }
+  const refused = priceConfirmationRefusal(priceCredits, confirmedPriceCredits, customer.creditsBalanceCents);
+  if (refused) return refused;
 
   const debited = await db.$transaction(async (tx) => {
     const result = await tx.customer.updateMany({
@@ -356,6 +343,39 @@ async function submitWithConfirmedPrice(
   );
 
   return NextResponse.json({ ...data, priceCredits });
+}
+
+/**
+ * Jobs taking the confirm-then-charge path (Forte, the priced noisy
+ * simulator) need a confirmed price: the client's figure is an upper bound
+ * the user agreed to. Per-shot QPUs (IQM, Rigetti) don't: their price is
+ * fixed by the shot count and shown on the submit button. Missing: 409 price_confirmation_required, with
+ * the price, so an API caller can't run a paid job without having seen it.
+ * Lower than the server's price: 409 price_changed. Null when it's fine.
+ */
+function priceConfirmationRefusal(priceCredits: number, confirmedPriceCredits: unknown, balanceCredits: number) {
+  if (typeof confirmedPriceCredits !== "number" || !Number.isFinite(confirmedPriceCredits)) {
+    return NextResponse.json(
+      {
+        error: "price_confirmation_required",
+        priceCredits,
+        balanceCredits,
+        message: `This job costs ${priceCredits} credits; resubmit with confirmedPriceCredits: ${priceCredits} to run it.`,
+      },
+      { status: 409 },
+    );
+  }
+  if (priceCredits > confirmedPriceCredits) {
+    return NextResponse.json(
+      {
+        error: "price_changed",
+        priceCredits,
+        message: `The price for this job is now ${priceCredits} credits. Review the new price and confirm again.`,
+      },
+      { status: 409 },
+    );
+  }
+  return null;
 }
 
 /** Returns a per-job charge for a job qpu-proxy never accepted. False if the refund itself failed (logged for manual follow-up). */

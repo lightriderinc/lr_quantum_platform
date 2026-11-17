@@ -121,6 +121,21 @@ export function isPricedPerJob(id: QuantumBackendId): boolean {
   return config.pricedPerJob === true;
 }
 
+/** Per-shot paid QPUs (IQM, Rigetti): not free and not priced per job. Their price is perShotPriceCredits(). */
+export function isPricedPerShot(id: QuantumBackendId): boolean {
+  return QUANTUM_BACKENDS[id].costPerShotCents > 0 && !isPricedPerJob(id);
+}
+
+/**
+ * The credit price of a job on a per-shot backend: shots times its rate,
+ * rounded up to a whole credit (credits are whole cents; the rate can be
+ * fractional, e.g. 0.2). The submit route charges exactly this, and the
+ * submit popups and composer show it before the user confirms.
+ */
+export function perShotPriceCredits(id: QuantumBackendId, shots: number): number {
+  return Math.ceil(shots * QUANTUM_BACKENDS[id].costPerShotCents);
+}
+
 /**
  * Real hardware that costs credits: per-shot priced above 0, or per-job
  * priced. The single test for "is this free" — never read costPerShotCents

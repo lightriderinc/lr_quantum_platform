@@ -1,6 +1,6 @@
 import { resolveCustomerFromRequest } from "@/lib/auth/resolveCustomer";
 import { IONQ_NOISY_SIM_BACKEND, IonqQuoteError, noisySimPriceCredits, quoteIonqJob } from "@/lib/quantum/ionqPricing";
-import { isPricedPerJob, isValidBackend, QUANTUM_BACKENDS } from "@/lib/quantum/backends";
+import { isPricedPerJob, isPricedPerShot, isValidBackend, perShotPriceCredits, QUANTUM_BACKENDS } from "@/lib/quantum/backends";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/lr/quantum/estimate  { backend, circuit, shots }
  *
- * The credit price of one job on a per-job priced backend (IonQ Forte), or
+ * The credit price of one job on a paid backend: per job (IonQ Forte), per
+ * shot (IQM, Rigetti: shots times the rate, as the submit route charges), or
  * on the IonQ noisy simulator (0 while it is free; see
  * IONQ_NOISY_SIM_PRICE_PER_SHOT_USD), shown to the user before they confirm. Charges nothing and submits
  * nothing. The submit route re-quotes server-side and never trusts this
@@ -36,11 +37,17 @@ export async function POST(req: Request) {
     });
   }
 
+  if (backend && isValidBackend(backend) && isPricedPerShot(backend)) {
+    return NextResponse.json({
+      backend,
+      shots: shots ?? 1,
+      priceCredits: perShotPriceCredits(backend, shots ?? 1),
+      balanceCredits: customer.creditsBalanceCents,
+    });
+  }
+
   if (!backend || !isValidBackend(backend) || !isPricedPerJob(backend)) {
-    return NextResponse.json(
-      { error: "Price estimates are only for backends priced per job (IonQ Forte)." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Price estimates are only for paid backends." }, { status: 400 });
   }
 
   try {
