@@ -2,7 +2,7 @@ import type { BackendSortKey, SortDirection } from "@/lib/backends/sort";
 import { getQuantumBackendId } from "@/lib/quantum/backends";
 import { isReservationCatalogId } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
-import BackendStatusBadge from "./BackendStatusBadge";
+import BackendAvailabilityBadge from "./BackendAvailabilityBadge";
 import BackendTypeTag from "./BackendTypeTag";
 
 const COLUMNS: { label: string; sortKey?: BackendSortKey }[] = [
@@ -10,7 +10,7 @@ const COLUMNS: { label: string; sortKey?: BackendSortKey }[] = [
   { label: "Provider", sortKey: "provider" },
   { label: "Qubits", sortKey: "qubits" },
   { label: "Type", sortKey: "type" },
-  { label: "Status" },
+  { label: "Availability" },
 ];
 
 // Table view of the backend catalog, styled to match JobsList. Row click
@@ -95,9 +95,9 @@ export default function BackendList({
                     </span>
                   )}
                   {!comingSoon && (
-                    <BackendStatusBadge
-                      status={backend.status}
-                      info={backend.statusInfo}
+                    <BackendAvailabilityBadge
+                      backend={backend}
+                      fallback={<span className="text-xs text-gray-400">—</span>}
                     />
                   )}
                 </td>
