@@ -1,4 +1,8 @@
-import type { AvailabilityWindow, BackendAvailability } from "@/types/backend";
+import type {
+  AvailabilityWindow,
+  Backend,
+  BackendAvailability,
+} from "@/types/backend";
 
 // Shared helpers for the live queue + availability shown on backend cards and
 // in the detail modal. `deriveAvailability` runs where the provider data is
@@ -96,4 +100,41 @@ export function availabilityTextClass(
   availability: BackendAvailability | undefined,
 ): string {
   return availability?.availableNow ? "text-emerald-600" : "text-gray-400";
+}
+
+export type AvailabilityTone = "available" | "unavailable" | "unknown";
+
+export interface AvailabilitySummary {
+  label: string;
+  tone: AvailabilityTone;
+}
+
+// The one-line availability the catalog card and list row show (in place of
+// the old status badge). The window schedule says when a machine is meant to
+// run jobs; the status light says whether it actually can. So a machine its
+// provider reports as down, or as in-window but not taking jobs (paused, e.g.
+// no calibration), reads "Unavailable" whatever the schedule says. A status
+// we couldn't confirm ("unknown") never overrides the schedule, and with no
+// schedule to fall back on it reads "Unknown" rather than looking like down.
+// Returns null when the provider doesn't report availability at all, so
+// callers render nothing instead of a guess.
+export function summarizeAvailability(
+  backend: Pick<Backend, "availability" | "status">,
+): AvailabilitySummary | null {
+  const { availability, status } = backend;
+  if (!availability) return null;
+
+  const blocked =
+    status === "offline" ||
+    status === "maintenance" ||
+    (status === "paused" && availability.availableNow);
+
+  if (!blocked) {
+    const label = formatAvailability(availability);
+    if (label) {
+      return { label, tone: availability.availableNow ? "available" : "unavailable" };
+    }
+    if (status === "unknown") return { label: "Unknown", tone: "unknown" };
+  }
+  return { label: "Unavailable", tone: "unavailable" };
 }

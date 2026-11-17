@@ -5,7 +5,7 @@ import {
   ActiveReservationCard,
   ReservationCard,
 } from "@/components/reservations/MyReservationsList";
-import { fetchMyReservations } from "@/lib/quantum/reservations";
+import { fetchMyReservations, RESERVATION_PAGE_HREF } from "@/lib/quantum/reservations";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -41,7 +41,7 @@ export default function DashboardReservations() {
         <h2 className="text-xl font-semibold text-gray-600">Reservations</h2>
         <div className="mt-3 flex justify-end">
           <Link
-            href="/backends/rigetti-cepheus-1-108q?tab=reservation"
+            href={RESERVATION_PAGE_HREF}
             className="text-sm font-medium text-gray-700 inline-flex items-center gap-2 hover:text-[var(--brand-primary)]"
           >
             View all reservations <MdArrowForward />

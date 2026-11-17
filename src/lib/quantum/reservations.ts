@@ -16,6 +16,20 @@ export function isReservationCatalogId(id: string): boolean {
   return id === RESERVED_CEPHEUS_BACKEND_ID;
 }
 
+/**
+ * The real Cepheus-1-108Q catalog card. It only runs jobs inside a reserved
+ * time slot, so wherever the catalog would show on-demand availability or a
+ * submit path, it points to booking instead.
+ */
+export const RESERVATION_ONLY_BACKEND_ID = "rigetti.qpu.Cepheus-1-108Q";
+
+export function isReservationOnlyBackend(id: string): boolean {
+  return id === RESERVATION_ONLY_BACKEND_ID;
+}
+
+/** Where reservations are booked and listed (the Cepheus page's Reservation tab). */
+export const RESERVATION_PAGE_HREF = "/backends/rigetti-cepheus-1-108q?tab=reservation";
+
 // Same physical device as the "rigetti-cepheus" QUANTUM_BACKENDS entry —
 // reused from there rather than re-hardcoded, so the two stay in sync.
 export const RESERVATION_DEVICE_INSTANCE = QUANTUM_BACKENDS["rigetti-cepheus"].deviceInstance;

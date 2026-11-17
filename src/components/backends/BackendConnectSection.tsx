@@ -5,7 +5,11 @@ import BackendConnectSectionSkeleton from "@/components/backends/BackendConnectS
 import LRButton from "@/components/ui/LRButton";
 import { COLAB_NOTEBOOKS_BASE_URL } from "@/lib/colab";
 import { getQuantumBackendId, isPricedPerJob } from "@/lib/quantum/backends";
-import { fetchMyReservations } from "@/lib/quantum/reservations";
+import {
+  fetchMyReservations,
+  isReservationOnlyBackend,
+  RESERVATION_PAGE_HREF,
+} from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -13,9 +17,6 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { MdCheck, MdContentCopy, MdOpenInNew } from "react-icons/md";
 import InfoBox from "../InfoBox";
-
-/** rigetti-cepheus is only submittable during a reserved window. */
-const RESERVED_ONLY_BACKEND_ID = "rigetti.qpu.Cepheus-1-108Q";
 
 // Real backends get their own notebook (backend hardcoded in the submit
 // cell); mock backends — and anything unrecognized — fall through to the
@@ -171,7 +172,7 @@ export default function BackendConnectSection({
     readOriginOnServer,
   );
   const quantumBackendId = getQuantumBackendId(backend.id);
-  const isReservedOnlyBackend = backend.id === RESERVED_ONLY_BACKEND_ID;
+  const isReservedOnlyBackend = isReservationOnlyBackend(backend.id);
 
   const { data: hasApiKey, isLoading } = useQuery({
     queryKey: ["settings", "has-api-key"],
@@ -279,7 +280,7 @@ export default function BackendConnectSection({
           <br />
           Book a slot on the{" "}
           <Link
-            href="/backends/rigetti-cepheus-1-108q?tab=reservation"
+            href={RESERVATION_PAGE_HREF}
             className="underline font-medium text-blue-700 hover:text-[var(--brand-primary)]"
           >
             reservation page
@@ -326,11 +327,7 @@ export default function BackendConnectSection({
             <div className="flex flex-row">
               <LRButton
                 variant="primary"
-                onClick={() =>
-                  router.push(
-                    "/backends/rigetti-cepheus-1-108q?tab=reservation",
-                  )
-                }
+                onClick={() => router.push(RESERVATION_PAGE_HREF)}
               >
                 Book a reservation
               </LRButton>

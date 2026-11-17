@@ -1,21 +1,17 @@
 import TiltCard from "@/components/ui/TiltCard";
-import {
-  availabilityTextClass,
-  formatAvailability,
-  formatQueue,
-  formatQueueTime,
-} from "@/lib/backends/availability";
+import { formatQueue, formatQueueTime } from "@/lib/backends/availability";
 import { getQuantumBackendId } from "@/lib/quantum/backends";
 import { isReservationCatalogId } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
+import BackendAvailabilityBadge from "./BackendAvailabilityBadge";
 import BackendSpec from "./BackendSpec";
-import BackendStatusBadge from "./BackendStatusBadge";
 import BackendTypeTag from "./BackendTypeTag";
 
-// A single backend card. Composes the smaller status / spec / tag pieces
-// inside an interactive TiltCard surface. Live queue depth and availability are
-// shown when the provider reports them (IQM); ID and full metrics live in the
-// detail modal opened via onSelect.
+// A single backend card. Composes the smaller availability / spec / tag pieces
+// inside an interactive TiltCard surface. The header shows availability (or a
+// booking link for the reservation-only Cepheus QPU); live queue depth or
+// predicted queue time show when the provider reports them. ID and full
+// metrics live in the detail modal opened via onSelect.
 export default function BackendCard({
   backend,
   onSelect,
@@ -23,17 +19,14 @@ export default function BackendCard({
   backend: Backend;
   onSelect?: (backend: Backend) => void;
 }) {
-  const { name, type, status, qubits, provider, queueDepth, availability, queueTimeMs, noiseModel } =
-    backend;
-  // Providers that report a predicted queue time (IonQ) show that instead of
-  // the availability line, which would only repeat the status badge.
+  const { name, type, qubits, provider, queueDepth, queueTimeMs, noiseModel } = backend;
+  // Providers that report a predicted queue time (IonQ) get their own row.
   const hasQueueTime = queueTimeMs !== undefined;
   // The reservation card is a real, bookable access path today even though
   // it has no QUANTUM_BACKENDS submission mapping of its own (see
   // reservations.ts) — it isn't "coming soon" like a genuinely unmapped card.
   const comingSoon =
     !isReservationCatalogId(backend.id) && getQuantumBackendId(backend.id) === null;
-  const availabilityLabel = formatAvailability(availability);
 
   return (
     <TiltCard
@@ -52,9 +45,7 @@ export default function BackendCard({
             Coming soon
           </span>
         )}
-        {!comingSoon && (
-          <BackendStatusBadge status={status} info={backend.statusInfo} />
-        )}
+        {!comingSoon && <BackendAvailabilityBadge backend={backend} />}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -70,16 +61,6 @@ export default function BackendCard({
           />
         )}
         {noiseModel && <BackendSpec label="Noise model" value={noiseModel} />}
-        {!hasQueueTime && availabilityLabel && (
-          <BackendSpec
-            label="Availability"
-            value={
-              <span className={availabilityTextClass(availability)}>
-                {availabilityLabel}
-              </span>
-            }
-          />
-        )}
       </div>
 
       {type === "Simulator" && noiseModel && backend.details?.description && (

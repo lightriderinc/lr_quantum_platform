@@ -1,4 +1,5 @@
 import type { Backend } from "@/types/backend";
+import { deriveAvailability } from "@/lib/backends/availability";
 import { asMicroseconds, asPercent, median } from "@/lib/metrics";
 
 // Live Rigetti QCS integration. Maps each hardcoded processor's Instruction
@@ -153,6 +154,8 @@ function mockBackend(): Backend {
     qubits: 107,
     provider: "Rigetti",
     queueDepth: null,
+    // Simulators are always available, same as IQM's mocks.
+    availability: deriveAvailability(undefined, true),
     details: {
       description: `${name} is a noise-model simulator of Rigetti Cepheus-1-108Q. Free and unlimited.`,
     },
