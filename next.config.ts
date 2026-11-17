@@ -19,6 +19,23 @@ const nextConfig: NextConfig = {
       process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ??
       '',
   },
+  // Anti-framing (clickjacking) on every page and API response. Only
+  // frame-ancestors, not a full CSP, so no script or style is affected.
+  // X-Frame-Options covers older browsers; frame-ancestors supersedes it.
+  // Nothing in the app needs to be framed: silent SSO is a top-level redirect
+  // (see src/lib/auth/silent-sso.ts), Stripe and Logto are redirects, and the
+  // Colab links open in a new tab.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
   async redirects() {
     return [
       {
