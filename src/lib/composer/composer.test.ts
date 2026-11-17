@@ -166,9 +166,8 @@ describe("stats and checks", () => {
     expect(runBlockers({ numQubits: 2, gates: [g("h", [0], 0)] }, sim)).toEqual([
       "Add a measurement.",
     ]);
-    expect(runBlockers({ ...BELL, numQubits: 12 }, { name: "Tiny", qubits: 5, provider: "IQM" })).toEqual([
-      "Tiny has 5 qubits and this circuit uses 12.",
-    ]);
+    // Qubit count is checked by qubitLimitError (backends.ts), shared with the submit route.
+    expect(runBlockers({ ...BELL, numQubits: 12 }, { name: "Tiny", qubits: 5, provider: "IQM" })).toEqual([]);
     const late: Circuit = { numQubits: 1, gates: [g("measure", [0], 0), g("x", [0], 1), g("measure", [0], 2)] };
     expect(runBlockers(late, sim)).toEqual([
       "IonQ measures only at the end. Move the gates after the measurement on qubit 0.",

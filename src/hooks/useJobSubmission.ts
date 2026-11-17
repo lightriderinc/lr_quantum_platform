@@ -6,6 +6,8 @@ import {
   isPricedPerJob,
   isPricedPerShot,
   perShotPriceCredits,
+  qubitLimitError,
+  shotsLimitError,
   type QuantumBackendId,
 } from "@/lib/quantum/backends";
 import {
@@ -65,6 +67,11 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
 
   const [quoteState, setQuoteState] = useState<{ key: string; quote: JobPriceQuote; notice: string | null } | null>(null);
   const pricedPerShot = isPricedPerShot(backend);
+  // Same checks and messages as the submit route: too many qubits for this
+  // backend, or shots out of range. Either one disables submit.
+  const qubitError = qubitLimitError(backend, circuit.num_qubits);
+  const shotsError = shotsLimitError(backend, shots);
+  const invalidJob = qubitError !== null || shotsError !== null;
   const priceNotice = quoteState?.key === key ? quoteState.notice : null;
   const [submittedJob, setSubmittedJob] = useState<Job | null>(null);
 
@@ -157,6 +164,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
 
   /** The one button: get a price first when one is needed, otherwise submit (with the confirmed price, if any). Only ever called from a click. */
   function submit() {
+    if (invalidJob) return;
     const vars: Vars = { key, backend, circuit, shots };
     if (pricedPerJob && !quote) {
       quoteMutation.mutate(vars);
@@ -187,13 +195,17 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     priceAboveBalance,
     /** Per-shot paid backends (IQM, Rigetti): the price shown on the button; null otherwise. */
     perShotPrice,
+    /** "This circuit needs N qubits. X has M." when the circuit doesn't fit the backend. */
+    qubitError,
+    /** "Max N shots on X" (or "At least 1 shot") when the shot count is out of range; shown by ShotsInput. */
+    shotsError,
     /** The price this job will be charged, when known: a confirmed quote or the per-shot price. */
     priceCredits,
     quoteError,
     submitError,
     isQuoting,
     isSubmitting,
-    canSubmit: !isSubmitting && !isQuoting && !priceAboveBalance,
+    canSubmit: !isSubmitting && !isQuoting && !priceAboveBalance && !invalidJob,
     submitLabel:
       pricedPerJob && !quote
         ? isQuoting

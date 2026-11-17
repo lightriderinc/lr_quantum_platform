@@ -62,6 +62,8 @@ vi.mock("@/lib/billing/db", () => {
 
 let estimateUsd: number | null = 1; // -> 130 credits at the default 1.3 markup
 let submitStatus = 200;
+let submitDetail: unknown = "IonQ backend 'qpu.forte-1' is currently 'unavailable'";
+let proxyDown = false; // the connection to qpu-proxy itself fails
 
 beforeEach(() => {
   state.balance = 10_000;
@@ -71,6 +73,8 @@ beforeEach(() => {
   state.jobs = [];
   estimateUsd = 1;
   submitStatus = 200;
+  submitDetail = "IonQ backend 'qpu.forte-1' is currently 'unavailable'";
+  proxyDown = false;
   vi.stubEnv("QUANTUM_PROXY_URL", PROXY);
   vi.stubEnv("QUANTUM_PROXY_SERVICE_KEY", "lr_test");
   vi.stubEnv("IONQ_PRICE_MARKUP", "");
@@ -91,7 +95,8 @@ beforeEach(() => {
       if (path === "/jobs") {
         const body = JSON.parse(init?.body as string);
         state.calls.push(`device ${body.device_instance}`);
-        if (submitStatus !== 200) return Response.json({ detail: "IonQ backend 'qpu.forte-1' is currently 'unavailable'" }, { status: submitStatus });
+        if (proxyDown) throw new TypeError("fetch failed");
+        if (submitStatus !== 200) return Response.json({ detail: submitDetail }, { status: submitStatus });
         return Response.json({ job_uuid: "job-123", status: "PENDING" });
       }
       throw new Error(`unexpected path ${path}`);
@@ -309,5 +314,102 @@ describe("estimate route", () => {
     );
     expect(res.status).toBe(400);
     expect(state.calls).toEqual([]);
+  });
+});
+
+describe("pre-submit validation: qubits and shots", () => {
+  const wide = (n: number) => ({
+    num_qubits: n,
+    instructions: [{ name: "h", qubits: [0] }, { name: "measure", qubits: [0], clbits: [0] }],
+  });
+
+  test("a circuit wider than the backend: 400 with the shared message, nothing sent or charged", async () => {
+    const r = await submit({ backend: "iqm-garnet-mock", circuit: wide(13), shots: 100 });
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "invalid_job", message: "This circuit needs 13 qubits. IQM Garnet (mock) has 12." });
+    expect(state.calls).toEqual([]);
+    expect(state.ledger).toEqual([]);
+  });
+
+  test("Forte: an oversized circuit is refused before any estimate", async () => {
+    const r = await submit({ backend: "ionq-forte-1", circuit: wide(37), shots: 100, confirmedPriceCredits: 999 });
+    expect(r.status).toBe(400);
+    expect(r.body.message).toBe("This circuit needs 37 qubits. IonQ Forte-1 has 36.");
+    expect(state.calls).toEqual([]);
+  });
+
+  test("shots over the backend's max, or below 1: 400, nothing sent", async () => {
+    let r = await submit({ backend: "rigetti-cepheus", circuit: CIRCUIT, shots: 100_001 });
+    expect(r.status).toBe(400);
+    expect(r.body.message).toBe("Max 100,000 shots on Rigetti Cepheus-1-108Q");
+    r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 0 });
+    expect(r.status).toBe(400);
+    expect(r.body.message).toBe("At least 1 shot");
+    r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 2.5 });
+    expect(r.status).toBe(400);
+    expect(state.calls).toEqual([]);
+  });
+
+  test("valid jobs at the limits go through unchanged", async () => {
+    let r = await submit({ backend: "iqm-garnet-mock", circuit: wide(12), shots: 100_000 });
+    expect(r.status).toBe(200);
+    r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 1 });
+    expect(r.status).toBe(200);
+    // No shots given: defaults to 1, as before.
+    r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT });
+    expect(r.status).toBe(200);
+  });
+});
+
+describe("qpu-proxy errors: 'unreachable' only for a failed connection", () => {
+  test("a 400 from qpu-proxy is passed on with its own message, nothing charged", async () => {
+    submitStatus = 400;
+    submitDetail = "instruction 2 (h): gates after measurement are not supported";
+    const r = await submit({ backend: "iqm-garnet", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(400);
+    expect(r.body).toEqual({ error: "rejected", message: "instruction 2 (h): gates after measurement are not supported" });
+    expect(state.ledger).toEqual([]);
+    expect(state.balance).toBe(10_000);
+  });
+
+  test("a 422 validation error lists FastAPI's messages", async () => {
+    submitStatus = 422;
+    submitDetail = [{ loc: ["body", "shots"], msg: "Input should be less than or equal to 100000" }];
+    const r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(400);
+    expect(r.body.message).toBe("Input should be less than or equal to 100000");
+  });
+
+  test("a 500 from qpu-proxy is a service error, not 'unreachable'", async () => {
+    submitStatus = 500;
+    submitDetail = "boom";
+    const r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(502);
+    expect(r.body.message).toBe("The job service returned an error (HTTP 500). Try again later.");
+    expect(JSON.stringify(r.body)).not.toContain("unreachable");
+  });
+
+  test("a failed connection still says unreachable", async () => {
+    proxyDown = true;
+    const r = await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 1000 });
+    expect(r.status).toBe(502);
+    expect(r.body.error).toContain("unreachable");
+  });
+
+  test("Forte: a 400 from qpu-proxy is passed on and the charge refunded", async () => {
+    submitStatus = 400;
+    submitDetail = "unsupported circuit format 'x'";
+    const r = await submit({ backend: "ionq-forte-1", circuit: CIRCUIT, shots: 100, confirmedPriceCredits: 130 });
+    expect(r.status).toBe(400);
+    expect(r.body.message).toBe("unsupported circuit format 'x' Your credits were returned.");
+    expect(state.balance).toBe(10_000);
+  });
+
+  test("Forte: a failed connection says unreachable and refunds", async () => {
+    proxyDown = true;
+    const r = await submit({ backend: "ionq-forte-1", circuit: CIRCUIT, shots: 100, confirmedPriceCredits: 130 });
+    expect(r.status).toBe(502);
+    expect(r.body.message).toContain("unreachable");
+    expect(state.balance).toBe(10_000);
   });
 });

@@ -9,11 +9,28 @@
 // that registry, not assumed. Without it, iqm-proxy falls back to whatever
 // its own IQM_SERVER env var's trailing alias is, which is exactly the
 // single-hardcoded-device behavior this is meant to replace.
+/** Fewest shots a job may ask for. */
+export const MIN_SHOTS = 1;
+
+/**
+ * Most shots per job, unless a backend's provider documents a lower limit.
+ * qpu-proxy accepts 1 to 100,000 shots for every device (app.py SubmitRequest).
+ * Provider limits checked 2026-11-17: IonQ's jobs API allows up to 1,000,000
+ * (lower per-backend limits exist but aren't published); IQM Resonance and
+ * Rigetti QCS document no maximum. So every backend uses this value today;
+ * set a backend's own maxShots below when a provider publishes one.
+ */
+export const DEFAULT_MAX_SHOTS = 100_000;
+
 interface QuantumBackendConfig {
+  /** Display name, as on its backend card. Used in validation messages. */
+  name: string;
   proxyPath: "/jobs";
   deviceInstance: string;
   /** Most qubits a circuit may use: qpu-proxy's own limit for the device (registry.py max_qubits). */
   maxQubits: number;
+  /** Most shots per job; see DEFAULT_MAX_SHOTS. */
+  maxShots: number;
   /** Flat per-shot price in credits (1 credit = 1 cent). 0 for free simulators. */
   costPerShotCents: number;
   /**
@@ -28,49 +45,65 @@ interface QuantumBackendConfig {
 export const QUANTUM_BACKENDS = {
   "iqm-garnet-mock": {
     proxyPath: "/jobs",
+    name: "IQM Garnet (mock)",
     deviceInstance: "garnet:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-garnet": {
     proxyPath: "/jobs",
+    name: "IQM Garnet",
     deviceInstance: "garnet",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "iqm-emerald-mock": {
     proxyPath: "/jobs",
+    name: "IQM Emerald (mock)",
     deviceInstance: "emerald:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-emerald": {
     proxyPath: "/jobs",
+    name: "IQM Emerald",
     deviceInstance: "emerald",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "iqm-sirius-mock": {
     proxyPath: "/jobs",
+    name: "IQM Sirius (mock)",
     deviceInstance: "sirius:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 12,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "iqm-sirius": {
     proxyPath: "/jobs",
+    name: "IQM Sirius",
     deviceInstance: "sirius",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 20,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "rigetti-cepheus-mock": {
     proxyPath: "/jobs",
+    name: "Rigetti Cepheus-1-108Q (mock)",
     deviceInstance: "rigetti:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 108,
     costPerShotCents: 0, // free — mock backend, no credits required
   },
   "rigetti-cepheus": {
     proxyPath: "/jobs",
+    name: "Rigetti Cepheus-1-108Q",
     deviceInstance: "Cepheus-1-108Q",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 108,
     // PLACEHOLDER: reuses the IQM real-hardware rate ($0.002/shot) as a
     // stand-in. Rigetti/QCS bills by QPU-time (per-second), not per-shot —
@@ -83,26 +116,34 @@ export const QUANTUM_BACKENDS = {
   // priced per job from IonQ's own estimate, never per shot.
   "ionq-simulator": {
     proxyPath: "/jobs",
+    name: "IonQ Simulator",
     deviceInstance: "ionq:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator, ideal (noiseless)
   },
   "ionq-forte-1-simulator": {
     proxyPath: "/jobs",
+    name: "IonQ Forte-1 (simulator)",
     deviceInstance: "forte-1:mock",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator with the Forte-1 noise model
   },
   "ionq-forte-1": {
     proxyPath: "/jobs",
+    name: "IonQ Forte-1",
     deviceInstance: "forte-1",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
   },
   "ionq-forte-enterprise-1": {
     proxyPath: "/jobs",
+    name: "IonQ Forte Enterprise-1",
     deviceInstance: "forte-enterprise-1",
+    maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
@@ -192,4 +233,24 @@ const CATALOG_ID_TO_QUANTUM_BACKEND: Partial<Record<string, QuantumBackendId>> =
 
 export function getQuantumBackendId(catalogBackendId: string): QuantumBackendId | null {
   return CATALOG_ID_TO_QUANTUM_BACKEND[catalogBackendId] ?? null;
+}
+
+// --- Pre-submit checks -------------------------------------------------------
+// Shared by the submit route (400) and every submit path in the UI (button
+// disabled, message shown), so both say exactly the same thing.
+
+const fmt = (n: number) => n.toLocaleString("en-US");
+
+/** Null when the circuit fits on the backend, otherwise the message to show. */
+export function qubitLimitError(id: QuantumBackendId, numQubits: unknown): string | null {
+  if (typeof numQubits !== "number") return null; // a malformed circuit is qpu-proxy's to reject
+  const { name, maxQubits } = QUANTUM_BACKENDS[id];
+  return numQubits > maxQubits ? `This circuit needs ${fmt(numQubits)} qubits. ${name} has ${fmt(maxQubits)}.` : null;
+}
+
+/** Null when the shot count is allowed on the backend, otherwise the message to show. */
+export function shotsLimitError(id: QuantumBackendId, shots: unknown): string | null {
+  const { name, maxShots } = QUANTUM_BACKENDS[id];
+  if (typeof shots !== "number" || !Number.isInteger(shots) || shots < MIN_SHOTS) return `At least ${MIN_SHOTS} shot`;
+  return shots > maxShots ? `Max ${fmt(maxShots)} shots on ${name}` : null;
 }

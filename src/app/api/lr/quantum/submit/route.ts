@@ -10,6 +10,8 @@ import {
   isValidBackend,
   perShotPriceCredits,
   QUANTUM_BACKENDS,
+  qubitLimitError,
+  shotsLimitError,
   type QuantumBackendId,
 } from "@/lib/quantum/backends";
 import type { Customer } from "@prisma/client";
@@ -63,6 +65,12 @@ export async function POST(req: Request) {
       },
       { status: 400 },
     );
+  }
+
+  // Same checks, and the same messages, as the submit popups and composer.
+  const invalid = shotsLimitError(backend, shots ?? 1) ?? qubitLimitError(backend, circuit?.num_qubits);
+  if (invalid) {
+    return NextResponse.json({ error: "invalid_job", message: invalid }, { status: 400 });
   }
 
   if (isPricedPerJob(backend)) {
@@ -133,6 +141,7 @@ export async function POST(req: Request) {
   }
 
   if (!proxyRes.ok) {
+    const detail = await proxyErrorDetail(proxyRes);
     // Rigetti's availability gating: qpu-proxy rejects a submission outright
     // (503) when the device has no capacity, rather than queuing it. As of
     // 2026-08-12 the body is a free-text `detail` string, e.g.
@@ -141,17 +150,14 @@ export async function POST(req: Request) {
     // {"status":"busy","next_available_at":"..."} instead of expanding this
     // regex further if the wording changes.
     if (proxyRes.status === 503) {
-      const errBody: Record<string, unknown> = await proxyRes.json().catch(() => ({}));
-      const detail = typeof errBody.detail === "string" ? errBody.detail : "";
       const match = detail.match(/next_available_at=([^)]+)\)/);
       if (match) {
         return NextResponse.json({ error: "busy", nextAvailableAt: match[1] }, { status: 503 });
       }
     }
-    return NextResponse.json(
-      { error: "Job submission service is currently unreachable. Try again later." },
-      { status: 502 },
-    );
+    // qpu-proxy answered, so the service is reachable: pass its reason on.
+    const refusal = proxyRefusal(proxyRes.status, detail);
+    return NextResponse.json({ error: refusal.error, message: refusal.message }, { status: refusal.status });
   }
 
   const data = await proxyRes.json();
@@ -301,22 +307,26 @@ async function submitWithConfirmedPrice(
   });
 
   if (!proxyRes || !proxyRes.ok) {
-    const unavailable = proxyRes?.status === 503;
-    if (proxyRes) {
-      const errBody: Record<string, unknown> = await proxyRes.json().catch(() => ({}));
-      console.error(`[ionq] qpu-proxy refused ${backend} job (HTTP ${proxyRes.status}):`, errBody.detail ?? errBody);
-    }
+    const detail = proxyRes ? await proxyErrorDetail(proxyRes) : "";
+    if (proxyRes) console.error(`[ionq] qpu-proxy refused ${backend} job (HTTP ${proxyRes.status}):`, detail);
     const refunded = await refundPerJobCharge(customer.id, backend, priceCredits);
-    const what = unavailable
-      ? "This IonQ system is unavailable right now, for example during maintenance."
-      : "Job submission service is currently unreachable.";
     const charge = refunded
       ? "Your credits were returned."
       : "Your credits will be returned; contact support if they don't appear.";
-    return NextResponse.json(
-      { error: unavailable ? "unavailable" : "submission_failed", message: `${what} ${charge}` },
-      { status: unavailable ? 503 : 502 },
-    );
+    if (!proxyRes) {
+      return NextResponse.json(
+        { error: "submission_failed", message: `Job submission service is currently unreachable. ${charge}` },
+        { status: 502 },
+      );
+    }
+    if (proxyRes.status === 503) {
+      return NextResponse.json(
+        { error: "unavailable", message: `This IonQ system is unavailable right now, for example during maintenance. ${charge}` },
+        { status: 503 },
+      );
+    }
+    const refusal = proxyRefusal(proxyRes.status, detail);
+    return NextResponse.json({ error: refusal.error, message: `${refusal.message} ${charge}` }, { status: refusal.status });
   }
 
   const data = await proxyRes.json();
@@ -376,6 +386,35 @@ function priceConfirmationRefusal(priceCredits: number, confirmedPriceCredits: u
     );
   }
   return null;
+}
+
+/**
+ * qpu-proxy's reason for refusing a job: FastAPI's `detail`, a string for
+ * its own 400s, or a list of {msg} for request validation (422).
+ */
+async function proxyErrorDetail(res: Response): Promise<string> {
+  const body: { detail?: unknown } = await res.json().catch(() => ({}));
+  if (typeof body.detail === "string") return body.detail;
+  if (Array.isArray(body.detail)) {
+    return body.detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : ""))
+      .filter(Boolean)
+      .join("; ");
+  }
+  return "";
+}
+
+/**
+ * What to tell the caller when qpu-proxy answered but refused the job. It
+ * answered, so this is never "unreachable" (that is only for a failed
+ * connection). 400/422: the job itself is wrong, so its own message, as a
+ * 400. Anything else: a service error.
+ */
+function proxyRefusal(status: number, detail: string): { status: number; error: string; message: string } {
+  if (status === 400 || status === 422) {
+    return { status: 400, error: "rejected", message: detail || "The backend rejected this job." };
+  }
+  return { status: 502, error: "submission_failed", message: `The job service returned an error (HTTP ${status}). Try again later.` };
 }
 
 /** Returns a per-job charge for a job qpu-proxy never accepted. False if the refund itself failed (logged for manual follow-up). */

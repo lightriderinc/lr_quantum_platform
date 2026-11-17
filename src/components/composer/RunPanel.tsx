@@ -179,7 +179,7 @@ export default function RunPanel({
             if (selected && reasons.length === 0) submission.submit();
           }}
         >
-          <ShotsInput value={shots} onChange={setShots} />
+          <ShotsInput value={shots} onChange={setShots} error={submission.shotsError} />
 
           {reasons.length > 0 && (
             <div className="default-radius border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" data-composer-blockers>

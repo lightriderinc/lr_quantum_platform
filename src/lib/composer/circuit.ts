@@ -245,9 +245,8 @@ export function runBlockers(
   const stats = circuitStats(circuit);
   if (stats.gates === 0 && stats.measurements === 0) reasons.push("Add at least one gate.");
   if (stats.measurements === 0) reasons.push("Add a measurement.");
-  if (backend.qubits < circuit.numQubits) {
-    reasons.push(`${backend.name} has ${backend.qubits} qubits and this circuit uses ${circuit.numQubits}.`);
-  }
+  // Too many qubits for the backend is checked in useJobSubmission
+  // (qubitLimitError), with the same message as the submit route.
   if (backend.provider.startsWith("IonQ")) {
     const late = gatesAfterMeasure(circuit);
     if (late.length > 0) {

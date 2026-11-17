@@ -176,7 +176,7 @@ export default function BackendSubmitModal({
                     </select>
                   </div>
 
-                  <ShotsInput value={shots} onChange={setShots} />
+                  <ShotsInput value={shots} onChange={setShots} error={submission.shotsError} />
 
                   <JobSubmitControls submission={submission} />
 

@@ -16,6 +16,7 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
     balanceCredits,
     priceAboveBalance,
     perShotPrice,
+    qubitError,
     quoteError,
     submitError,
     needsCredits,
@@ -23,6 +24,12 @@ export default function JobSubmitControls({ submission }: { submission: JobSubmi
 
   return (
     <>
+      {qubitError && (
+        <p className="text-sm text-red-600" data-qubit-error>
+          {qubitError}
+        </p>
+      )}
+
       {pricedPerJob && quoteError && (
         <p className="text-sm text-red-500">
           {quoteError instanceof Error && quoteError.message
