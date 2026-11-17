@@ -33,7 +33,7 @@ export default function GatePalette({
   angleError: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-4" aria-label="Gates">
+    <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @3xl:grid-cols-4" aria-label="Gates">
       {GROUPS.map((group) => (
         <div key={group.id}>
           <p className="mb-1.5 text-xs font-medium text-gray-500">{group.label}</p>

@@ -245,7 +245,7 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 export function qubitLimitError(id: QuantumBackendId, numQubits: unknown): string | null {
   if (typeof numQubits !== "number") return null; // a malformed circuit is qpu-proxy's to reject
   const { name, maxQubits } = QUANTUM_BACKENDS[id];
-  return numQubits > maxQubits ? `This circuit needs ${fmt(numQubits)} qubits. ${name} has ${fmt(maxQubits)}.` : null;
+  return numQubits > maxQubits ? `This circuit has ${fmt(numQubits)} qubits. ${name} supports up to ${fmt(maxQubits)}.` : null;
 }
 
 /** Null when the shot count is allowed on the backend, otherwise the message to show. */

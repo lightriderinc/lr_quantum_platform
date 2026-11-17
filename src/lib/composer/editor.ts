@@ -26,6 +26,8 @@ export type EditorAction =
   | { type: "move"; id: string; qubits: number[]; column: number }
   | { type: "remove"; id: string }
   | { type: "setParams"; id: string; params: number[] }
+  /** Paste a copy of a gate (Ctrl+V, Ctrl+D, Duplicate) into the first free step after `after` on the same qubits, keeping its angle and control/target. `id` is the new gate's, so the caller can select it. */
+  | { type: "paste"; gate: CopiedGate; after: number; id: string }
   | { type: "addQubit"; max: number }
   | { type: "removeQubit" }
   | { type: "measureAll" }
@@ -37,6 +39,16 @@ export type EditorAction =
 
 export function initialEditorState(circuit: Circuit = EMPTY_CIRCUIT): EditorState {
   return { past: [], present: circuit, future: [] };
+}
+
+/** What Ctrl+C keeps: the gate itself, not its place. */
+export type CopiedGate = Pick<PlacedGate, "name" | "qubits" | "params">;
+
+/** The first step after `after` where `gate` fits on its qubits. */
+export function nextFreeColumn(circuit: Circuit, gate: Pick<PlacedGate, "name" | "qubits">, after: number): number {
+  let column = Math.max(0, after + 1);
+  while (isOccupied(circuit, column, gate)) column += 1;
+  return column;
 }
 
 let idCounter = 0;
@@ -93,6 +105,18 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
         ...circuit,
         gates: circuit.gates.map((g) => (g.id === gate.id ? { ...g, params: [action.params[0]] } : g)),
       };
+    }
+    case "paste": {
+      const qubits = action.gate.name === "barrier" ? allQubits(circuit.numQubits) : action.gate.qubits;
+      if (!validQubits(action.gate.name, qubits, circuit.numQubits)) return circuit;
+      const gate: PlacedGate = {
+        id: action.id,
+        name: action.gate.name,
+        qubits: [...qubits],
+        column: nextFreeColumn(circuit, { name: action.gate.name, qubits }, action.after),
+      };
+      if (action.gate.params?.length) gate.params = [...action.gate.params];
+      return { ...circuit, gates: [...circuit.gates, gate] };
     }
     case "addQubit": {
       if (circuit.numQubits >= action.max) return circuit;

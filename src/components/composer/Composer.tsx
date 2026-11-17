@@ -19,9 +19,9 @@ import {
 } from "@/lib/composer/circuit";
 import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
 import type { QuantumCircuitPayload } from "@/lib/quantum/client";
-import { editorReducer, initialEditorState, newGateId } from "@/lib/composer/editor";
+import { editorReducer, initialEditorState, newGateId, type CopiedGate } from "@/lib/composer/editor";
 import { outcomeProbabilities, qubitSummaries, simulate } from "@/lib/composer/statevector";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import {
   MdAdd,
   MdDeleteOutline,
@@ -132,29 +132,60 @@ export default function Composer({
     if (selectedId === id) setSelectedId(null);
   }
 
-  // Keyboard: undo/redo, Delete to remove the selected gate, Escape to cancel.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (isTyping(e.target)) return;
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        dispatch({ type: e.shiftKey ? "redo" : "undo" });
-      } else if (mod && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        dispatch({ type: "redo" });
-      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-        e.preventDefault();
-        dispatch({ type: "remove", id: selectedId });
-        setSelectedId(null);
-      } else if (e.key === "Escape") {
-        setPending(null);
-        setSelectedId(null);
-      }
+  // Copy and paste: Ctrl+C keeps the selected gate (name, qubits, angle);
+  // Ctrl+V puts a copy in the next free step after the copied one, on the
+  // same qubits. Duplicate (Ctrl+D) does both at once. The copy is selected,
+  // so repeating continues along the line. One undo step each.
+  const clipboard = useRef<{ gate: CopiedGate; column: number } | null>(null);
+
+  function paste(gate: CopiedGate, after: number) {
+    const id = newGateId();
+    dispatch({ type: "paste", gate, after, id });
+    setSelectedId(id);
+    setPending(null);
+  }
+
+  function duplicate(gate: PlacedGate) {
+    paste(gate, gate.column);
+  }
+
+  // Keyboard: undo/redo, copy/paste/duplicate, Delete to remove the selected
+  // gate, Escape to cancel. An effect event, so it always sees the current
+  // circuit and selection without re-adding the listener.
+  const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
+    if (isTyping(e.target)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    const selected = circuit.gates.find((g) => g.id === selectedId) ?? null;
+    if (mod && key === "c" && selected) {
+      e.preventDefault();
+      clipboard.current = { gate: { name: selected.name, qubits: selected.qubits, params: selected.params }, column: selected.column };
+    } else if (mod && key === "v" && clipboard.current) {
+      e.preventDefault();
+      paste(clipboard.current.gate, clipboard.current.column);
+    } else if (mod && key === "d" && selected) {
+      e.preventDefault();
+      duplicate(selected);
+    } else if (mod && key === "z") {
+      e.preventDefault();
+      dispatch({ type: e.shiftKey ? "redo" : "undo" });
+    } else if (mod && key === "y") {
+      e.preventDefault();
+      dispatch({ type: "redo" });
+    } else if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+      e.preventDefault();
+      dispatch({ type: "remove", id: selectedId });
+      setSelectedId(null);
+    } else if (e.key === "Escape") {
+      setPending(null);
+      setSelectedId(null);
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedId]);
+  });
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => onKeyDown(e);
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  }, []);
 
   const hint = pending
     ? pending.name === "cx"
@@ -165,98 +196,103 @@ export default function Composer({
       : "Pick a gate, then click a qubit line. Drag gates to place or move them.";
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    // Each panel is its own bordered frame and adapts to its own width
+    // (container queries), so nothing spills out of it: one column below lg,
+    // the run panel beside the rest from lg up.
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex min-w-0 flex-col gap-6">
-        <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Circuit editor">
-          <div className="mb-4 flex flex-wrap items-center gap-1.5 lg:flex-nowrap" role="toolbar" aria-label="Circuit tools">
-            <button
-              type="button"
-              className={iconButton}
-              onClick={() => dispatch({ type: "undo" })}
-              disabled={state.past.length === 0}
-              aria-label="Undo"
-              title="Undo (Ctrl+Z)"
-            >
-              <MdUndo />
-            </button>
-            <button
-              type="button"
-              className={iconButton}
-              onClick={() => dispatch({ type: "redo" })}
-              disabled={state.future.length === 0}
-              aria-label="Redo"
-              title="Redo (Ctrl+Shift+Z)"
-            >
-              <MdRedo />
-            </button>
-            <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
-            <button
-              type="button"
-              className={iconButton}
-              onClick={() => dispatch({ type: "removeQubit" })}
-              disabled={circuit.numQubits <= MIN_QUBITS}
-              aria-label="Remove the last qubit"
-              title="Remove the last qubit and its gates"
-            >
-              <MdRemove />
-            </button>
-            <span className="min-w-16 shrink-0 text-center text-sm tabular-nums text-gray-700">
-              {circuit.numQubits} {circuit.numQubits === 1 ? "qubit" : "qubits"}
-            </span>
-            <button
-              type="button"
-              className={iconButton}
-              onClick={() => dispatch({ type: "addQubit", max: maxQubits })}
-              disabled={circuit.numQubits >= maxQubits}
-              aria-label="Add a qubit"
-              title={
-                circuit.numQubits >= maxQubits
-                  ? chosenBackend
-                    ? `${chosenBackend.name} has ${maxQubits} qubits`
-                    : `Up to ${maxQubits} qubits until you choose a backend`
-                  : "Add a qubit"
-              }
-            >
-              <MdAdd />
-            </button>
-            <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
-            <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every unmeasured qubit">
-              <MdPlaylistAddCheck /> Measure all
-            </button>
-            <TemplatesMenu
-              maxQubits={maxQubits}
-              numQubits={circuit.numQubits}
-              onLoad={(templatePayload) => {
-                // Built by the menu, not the reducer: Haar templates draw new angles on each load.
-                dispatch({ type: "template", circuit: fromLrCircuit(templatePayload, newGateId) });
-                setSelectedId(null);
-                setPending(null);
-              }}
-            />
-            <button
-              type="button"
-              className={iconButton}
-              onClick={() => {
-                dispatch({ type: "clear" });
-                setSelectedId(null);
-                setPending(null);
-              }}
-              disabled={circuit.gates.length === 0}
-              aria-label="Clear the circuit"
-              title="Clear the circuit"
-            >
-              <MdDeleteOutline />
-            </button>
-
-            <dl className="ml-auto flex shrink-0 items-center gap-3 pl-2 text-sm" aria-label="Circuit size">
+        <section className="@container min-w-0 default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Circuit editor">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5" role="toolbar" aria-label="Circuit tools">
+              <button
+                type="button"
+                className={iconButton}
+                onClick={() => dispatch({ type: "undo" })}
+                disabled={state.past.length === 0}
+                aria-label="Undo"
+                title="Undo (Ctrl+Z)"
+              >
+                <MdUndo />
+              </button>
+              <button
+                type="button"
+                className={iconButton}
+                onClick={() => dispatch({ type: "redo" })}
+                disabled={state.future.length === 0}
+                aria-label="Redo"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <MdRedo />
+              </button>
+              <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
+              <button
+                type="button"
+                className={iconButton}
+                onClick={() => dispatch({ type: "removeQubit" })}
+                disabled={circuit.numQubits <= MIN_QUBITS}
+                aria-label="Remove the last qubit"
+                title="Remove the last qubit and its gates"
+              >
+                <MdRemove />
+              </button>
+              <span className="min-w-16 shrink-0 text-center text-sm tabular-nums text-gray-700">
+                {circuit.numQubits} {circuit.numQubits === 1 ? "qubit" : "qubits"}
+              </span>
+              <button
+                type="button"
+                className={iconButton}
+                onClick={() => dispatch({ type: "addQubit", max: maxQubits })}
+                disabled={circuit.numQubits >= maxQubits}
+                aria-label="Add a qubit"
+                title={
+                  circuit.numQubits >= maxQubits
+                    ? chosenBackend
+                      ? `${chosenBackend.name} supports up to ${maxQubits} qubits`
+                      : `Up to ${maxQubits} qubits until you choose a backend`
+                    : "Add a qubit"
+                }
+              >
+                <MdAdd />
+              </button>
+              <span className="mx-1 h-6 w-px shrink-0 bg-gray-200" aria-hidden />
+              <button type="button" className={toolButton} onClick={() => dispatch({ type: "measureAll" })} title="Measure every unmeasured qubit">
+                <MdPlaylistAddCheck /> Measure all
+              </button>
+              <TemplatesMenu
+                maxQubits={maxQubits}
+                numQubits={circuit.numQubits}
+                onLoad={(templatePayload) => {
+                  // Built by the menu, not the reducer: Haar templates draw new angles on each load.
+                  dispatch({ type: "template", circuit: fromLrCircuit(templatePayload, newGateId) });
+                  setSelectedId(null);
+                  setPending(null);
+                }}
+              />
+              <button
+                type="button"
+                className={iconButton}
+                onClick={() => {
+                  dispatch({ type: "clear" });
+                  setSelectedId(null);
+                  setPending(null);
+                }}
+                disabled={circuit.gates.length === 0}
+                aria-label="Clear the circuit"
+                title="Clear the circuit"
+              >
+                <MdDeleteOutline />
+              </button>
+            </div>
+            <dl className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm" aria-label="Circuit size">
               <Stat label="Gates" value={stats.gates} />
               <Stat label="Depth" value={stats.depth} />
               <Stat label="Measurements" value={stats.measurements} />
             </dl>
           </div>
 
-          <div className="flex flex-col gap-4 lg:flex-row">
-            <div className="shrink-0 lg:w-52">
+          {/* Palette beside the grid when the editor is wide enough, above it otherwise. */}
+          <div className="flex flex-col gap-4 @3xl:flex-row">
+            <div className="@container shrink-0 @3xl:w-52">
               <GatePalette
                 tool={tool}
                 onPick={(name) => {
@@ -288,6 +324,7 @@ export default function Composer({
                   gate={selectedGate}
                   onAngle={(params) => dispatch({ type: "setParams", id: selectedGate.id, params })}
                   onRemove={() => removeGate(selectedGate.id)}
+                  onDuplicate={() => duplicate(selectedGate)}
                   onDone={() => setSelectedId(null)}
                 />
               ) : (
@@ -303,7 +340,7 @@ export default function Composer({
         <QasmPanel qasm={qasm} />
       </div>
 
-      <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+      <div className="min-w-0 lg:sticky lg:top-6 lg:self-start">
         <RunPanel
           payload={payload}
           isAuthenticated={isAuthenticated}
@@ -411,7 +448,7 @@ function TemplatesMenu({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-baseline gap-1.5">
+    <div className="flex items-baseline gap-1.5 whitespace-nowrap">
       <dt className="text-xs text-gray-500">{label}</dt>
       <dd className="font-semibold tabular-nums text-gray-900">{value}</dd>
     </div>
@@ -422,11 +459,13 @@ function GateInspector({
   gate,
   onAngle,
   onRemove,
+  onDuplicate,
   onDone,
 }: {
   gate: PlacedGate;
   onAngle: (params: number[]) => void;
   onRemove: () => void;
+  onDuplicate: () => void;
   onDone: () => void;
 }) {
   const def = gateDef(gate.name);
@@ -463,6 +502,9 @@ function GateInspector({
         </label>
       )}
       <span className="ml-auto flex items-center gap-2">
+        <button type="button" onClick={onDuplicate} title="Duplicate (Ctrl+D)" className="cursor-pointer text-xs font-medium text-gray-700 hover:underline">
+          Duplicate
+        </button>
         <button type="button" onClick={onRemove} className="cursor-pointer text-xs font-medium text-red-600 hover:underline">
           Remove
         </button>

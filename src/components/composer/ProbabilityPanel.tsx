@@ -35,7 +35,7 @@ export default function ProbabilityPanel({
 }) {
   return (
     <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
-      <div className="mb-1 flex items-baseline justify-between gap-2">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
         <h2 className="text-base font-semibold text-gray-900">Probabilities</h2>
         <span className="text-xs text-gray-500">Ideal simulation, no noise</span>
       </div>

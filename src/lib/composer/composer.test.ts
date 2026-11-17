@@ -22,7 +22,7 @@ import {
   type CircuitTemplate,
   type CircuitTemplateId,
 } from "@/lib/circuits/templates";
-import { applyEdit, editorReducer, initialEditorState, type EditorState } from "./editor";
+import { applyEdit, editorReducer, initialEditorState, nextFreeColumn, type EditorState } from "./editor";
 import {
   chartAxisMax,
   outcomeProbabilities,
@@ -443,5 +443,30 @@ describe("editor", () => {
     expect(added).toEqual([0, 2]);
     expect(gatesAfterMeasure(c)).toEqual([]);
     expect(applyEdit(c, { type: "measureAll" })).toBe(c);
+  });
+
+  test("paste: a copy in the next free step on the same qubits, angle and control/target kept, one undo step", () => {
+    let s = start({ numQubits: 3, gates: [] });
+    s = editorReducer(s, { type: "place", name: "rx", qubits: [1], column: 0, params: [0.3] });
+    s = editorReducer(s, { type: "place", name: "h", qubits: [1], column: 1 }); // step 1 taken on q[1]
+    s = editorReducer(s, { type: "place", name: "cx", qubits: [2, 0], column: 0 });
+    const steps = s.past.length;
+
+    s = editorReducer(s, { type: "paste", gate: { name: "rx", qubits: [1], params: [0.3] }, after: 0, id: "copy-1" });
+    expect(s.present.gates.find((g) => g.id === "copy-1")).toMatchObject({ name: "rx", qubits: [1], params: [0.3], column: 2 });
+    expect(s.past.length).toBe(steps + 1);
+
+    // cx q[2] -> q[0] spans q[1], so it skips steps where anything sits on q[0..2].
+    s = editorReducer(s, { type: "paste", gate: { name: "cx", qubits: [2, 0] }, after: 0, id: "copy-2" });
+    expect(s.present.gates.find((g) => g.id === "copy-2")).toMatchObject({ qubits: [2, 0], column: 3 });
+
+    s = editorReducer(s, { type: "undo" });
+    expect(s.present.gates.some((g) => g.id === "copy-2")).toBe(false);
+  });
+
+  test("paste onto a qubit that no longer exists does nothing", () => {
+    const c: Circuit = { numQubits: 2, gates: [] };
+    expect(applyEdit(c, { type: "paste", gate: { name: "x", qubits: [2] }, after: 0, id: "z" })).toBe(c);
+    expect(nextFreeColumn(c, { name: "x", qubits: [0] }, -1)).toBe(0);
   });
 });

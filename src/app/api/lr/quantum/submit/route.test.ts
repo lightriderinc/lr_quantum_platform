@@ -326,7 +326,7 @@ describe("pre-submit validation: qubits and shots", () => {
   test("a circuit wider than the backend: 400 with the shared message, nothing sent or charged", async () => {
     const r = await submit({ backend: "iqm-garnet-mock", circuit: wide(13), shots: 100 });
     expect(r.status).toBe(400);
-    expect(r.body).toEqual({ error: "invalid_job", message: "This circuit needs 13 qubits. IQM Garnet (mock) has 12." });
+    expect(r.body).toEqual({ error: "invalid_job", message: "This circuit has 13 qubits. IQM Garnet (mock) supports up to 12." });
     expect(state.calls).toEqual([]);
     expect(state.ledger).toEqual([]);
   });
@@ -334,7 +334,7 @@ describe("pre-submit validation: qubits and shots", () => {
   test("Forte: an oversized circuit is refused before any estimate", async () => {
     const r = await submit({ backend: "ionq-forte-1", circuit: wide(37), shots: 100, confirmedPriceCredits: 999 });
     expect(r.status).toBe(400);
-    expect(r.body.message).toBe("This circuit needs 37 qubits. IonQ Forte-1 has 36.");
+    expect(r.body.message).toBe("This circuit has 37 qubits. IonQ Forte-1 supports up to 36.");
     expect(state.calls).toEqual([]);
   });
 

@@ -68,10 +68,15 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
   const [quoteState, setQuoteState] = useState<{ key: string; quote: JobPriceQuote; notice: string | null } | null>(null);
   const pricedPerShot = isPricedPerShot(backend);
   // Same checks and messages as the submit route: too many qubits for this
-  // backend, or shots out of range. Either one disables submit.
+  // backend, or shots out of range. Either one disables submit. The shot
+  // count isn't judged while it's being typed: its message shows (and submit
+  // is disabled) once the box loses focus or a submit is tried, for that
+  // exact value. Typing again hides it until the next check.
   const qubitError = qubitLimitError(backend, circuit.num_qubits);
-  const shotsError = shotsLimitError(backend, shots);
-  const invalidJob = qubitError !== null || shotsError !== null;
+  const shotsProblem = shotsLimitError(backend, shots);
+  const [checkedShots, setCheckedShots] = useState<number | null>(null);
+  const shotsError = Object.is(checkedShots, shots) ? shotsProblem : null;
+  const invalidJob = qubitError !== null || shotsProblem !== null;
   const priceNotice = quoteState?.key === key ? quoteState.notice : null;
   const [submittedJob, setSubmittedJob] = useState<Job | null>(null);
 
@@ -164,6 +169,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
 
   /** The one button: get a price first when one is needed, otherwise submit (with the confirmed price, if any). Only ever called from a click. */
   function submit() {
+    setCheckedShots(shots);
     if (invalidJob) return;
     const vars: Vars = { key, backend, circuit, shots };
     if (pricedPerJob && !quote) {
@@ -195,17 +201,21 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     priceAboveBalance,
     /** Per-shot paid backends (IQM, Rigetti): the price shown on the button; null otherwise. */
     perShotPrice,
-    /** "This circuit needs N qubits. X has M." when the circuit doesn't fit the backend. */
+    /** "This circuit has N qubits. X supports up to M." when the circuit doesn't fit the backend. */
     qubitError,
-    /** "Max N shots on X" (or "At least 1 shot") when the shot count is out of range; shown by ShotsInput. */
+    /** "Max N shots on X" (or "At least 1 shot") once an out-of-range shot count has been checked (blur or submit); shown by ShotsInput. */
     shotsError,
+    /** ShotsInput's onBlur: check the shot count now. */
+    checkShots: () => setCheckedShots(shots),
     /** The price this job will be charged, when known: a confirmed quote or the per-shot price. */
     priceCredits,
     quoteError,
     submitError,
     isQuoting,
     isSubmitting,
-    canSubmit: !isSubmitting && !isQuoting && !priceAboveBalance && !invalidJob,
+    // A bad shot count only disables the button once its message shows, so
+    // clicking (or Enter) with an unchecked value still runs the check.
+    canSubmit: !isSubmitting && !isQuoting && !priceAboveBalance && !qubitError && !shotsError,
     submitLabel:
       pricedPerJob && !quote
         ? isQuoting
