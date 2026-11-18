@@ -10,8 +10,9 @@ import {
 
 // Composer editing as a reducer with undo/redo. Every action that changes
 // the circuit pushes the previous one onto `past`; an action that can't
-// apply (a cell already taken, a qubit out of range) returns the state
-// unchanged, so it never adds an empty undo step.
+// apply (a qubit out of range) returns the state unchanged, so it never adds
+// an empty undo step. Placing or moving a gate onto a spot that's taken
+// replaces whatever it overlaps there, in the same single step.
 
 export const HISTORY_LIMIT = 100;
 
@@ -70,16 +71,27 @@ function allQubits(n: number) {
   return Array.from({ length: n }, (_, i) => i);
 }
 
+/** The circuit's gates minus those in `column` that a gate on `qubits` would overlap (other than `keepId`). */
+function withoutOverlaps(
+  circuit: Circuit,
+  column: number,
+  candidate: Pick<PlacedGate, "name" | "qubits">,
+  keepId?: string,
+): PlacedGate[] {
+  return circuit.gates.filter(
+    (g) => g.id === keepId || g.column !== column || !isOccupied({ ...circuit, gates: [g] }, column, candidate),
+  );
+}
+
 /** The circuit after one editing action, or the same object if it doesn't apply. */
 export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
   switch (action.type) {
     case "place": {
       const qubits = action.name === "barrier" ? allQubits(circuit.numQubits) : action.qubits;
       if (!validQubits(action.name, qubits, circuit.numQubits) || action.column < 0) return circuit;
-      if (isOccupied(circuit, action.column, { name: action.name, qubits })) return circuit;
       const gate: PlacedGate = { id: newGateId(), name: action.name, qubits, column: action.column };
       if (gateDef(action.name).angle) gate.params = action.params?.length ? [action.params[0]] : [Math.PI / 2];
-      return { ...circuit, gates: [...circuit.gates, gate] };
+      return { ...circuit, gates: [...withoutOverlaps(circuit, action.column, gate), gate] };
     }
     case "move": {
       const gate = circuit.gates.find((g) => g.id === action.id);
@@ -87,10 +99,11 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
       const qubits = gate.name === "barrier" ? allQubits(circuit.numQubits) : action.qubits;
       if (!validQubits(gate.name, qubits, circuit.numQubits) || action.column < 0) return circuit;
       if (gate.column === action.column && qubits.every((q, i) => q === gate.qubits[i])) return circuit;
-      if (isOccupied(circuit, action.column, { name: gate.name, qubits }, gate.id)) return circuit;
       return {
         ...circuit,
-        gates: circuit.gates.map((g) => (g.id === gate.id ? { ...g, qubits, column: action.column } : g)),
+        gates: withoutOverlaps(circuit, action.column, { name: gate.name, qubits }, gate.id).map((g) =>
+          g.id === gate.id ? { ...g, qubits, column: action.column } : g,
+        ),
       };
     }
     case "remove": {

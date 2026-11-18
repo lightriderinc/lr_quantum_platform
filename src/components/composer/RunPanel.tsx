@@ -1,16 +1,15 @@
 "use client";
 
 import { handleSignIn } from "@/app/actions/auth";
-import BackendStatusBadge from "@/components/backends/BackendStatusBadge";
+import BackendAvailabilityBadge from "@/components/backends/BackendAvailabilityBadge";
 import CreditsSummary from "@/components/billing/CreditsSummary";
 import JobResultView from "@/components/jobs/JobResultView";
 import JobSubmitControls from "@/components/quantum/JobSubmitControls";
 import ShotsInput from "@/components/quantum/ShotsInput";
 import LRButton from "@/components/ui/LRButton";
-import { useIonqBackends } from "@/hooks/useIonqBackends";
-import { useIqmBackends } from "@/hooks/useIqmBackends";
 import { useJobSubmission } from "@/hooks/useJobSubmission";
-import { useRigettiBackends } from "@/hooks/useRigettiBackends";
+import { useRunnableBackends } from "@/hooks/useRunnableBackends";
+import { backendCondition } from "@/lib/backends/availability";
 import { BACKEND_TABS, backendTab, countByTab, type BackendTab } from "@/lib/backends/tabs";
 import type { LrCircuitPayload } from "@/lib/composer/circuit";
 import { getQuantumBackendId } from "@/lib/quantum/backends";
@@ -19,26 +18,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { MdArrowLeft } from "react-icons/md";
 
-/**
- * Backends a job can be sent to (no "Coming soon" cards), from the same
- * hooks as the Backends page. Used by the run panel and by the composer (for
- * the qubit limit); React Query shares one fetch between them.
- */
-export function useRunnableBackends() {
-  const { data: iqm = [], isLoading: iqmLoading } = useIqmBackends();
-  const { data: rigetti = [], isLoading: rigettiLoading } = useRigettiBackends();
-  const { data: ionq = [], isLoading: ionqLoading } = useIonqBackends();
-  return {
-    runnable: [...iqm, ...rigetti, ...ionq].filter((b) => getQuantumBackendId(b.id) !== null),
-    loading: iqmLoading || rigettiLoading || ionqLoading,
-  };
-}
-
 // Run panel: pick a backend (QPUs / Simulators, as on the Backends page, with
 // live status), set shots, and submit through the same flow as every other
 // submit (useJobSubmission: credit gate, Forte "Get price" then confirm,
 // server-side canUseIonqQpu). No backend is chosen to start with, so nothing
-// can be sent until the user picks one and clicks the submit button.
+// can be sent until the user picks one and clicks the submit button. Offline
+// or Unavailable backends are greyed out and can't be picked; the composer
+// clears the choice if the picked one goes unavailable.
 export default function RunPanel({
   payload,
   isAuthenticated,
@@ -131,12 +117,14 @@ export default function RunPanel({
           ? Array.from({ length: 4 }).map((_, i) => <span key={i} className="block h-12 animate-pulse default-radius bg-gray-100" />)
           : visible.map((b) => {
               const tooSmall = b.qubits < payload.num_qubits;
+              const unavailable = backendCondition(b).blocked;
+              const disabled = tooSmall || unavailable;
               const checked = b.id === selectedId;
               return (
                 <label
                   key={b.id}
                   className={`flex items-center gap-3 default-radius border px-3 py-2 text-sm transition-colors ${
-                    tooSmall ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-gray-300"
+                    disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-gray-300"
                   } ${checked ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-gray-100 bg-white"}`}
                 >
                   <input
@@ -144,7 +132,7 @@ export default function RunPanel({
                     name="composer-backend"
                     value={b.id}
                     checked={checked}
-                    disabled={tooSmall}
+                    disabled={disabled}
                     onChange={() => onSelect(b.id)}
                     className="accent-[var(--brand-primary)]"
                   />
@@ -154,7 +142,7 @@ export default function RunPanel({
                       {b.qubits} qubits{tooSmall ? `, too few for this circuit` : ""}
                     </span>
                   </span>
-                  <BackendStatusBadge status={b.status} info={b.statusInfo} />
+                  <BackendAvailabilityBadge backend={b} plain />
                 </label>
               );
             })}

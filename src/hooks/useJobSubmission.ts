@@ -1,6 +1,7 @@
 "use client";
 
 import { fetchJson, type Credits } from "@/components/billing/CreditsSummary";
+import { fetchJobs } from "@/components/jobs/JobsList";
 import {
   isPaidBackend,
   isPricedPerJob,
@@ -21,7 +22,7 @@ import {
 } from "@/lib/quantum/client";
 import type { Job } from "@/types/job";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // The submit flow shared by BackendSubmitModal and the /composer run panel,
 // so both charge, quote and gate exactly the same way:
@@ -42,6 +43,10 @@ import { useState } from "react";
 // A quote is for one exact backend, circuit and shot count. It's stored with
 // that key and only used while the key still matches, so any edit drops it
 // without an effect or an explicit reset.
+
+const TERMINAL = new Set(["COMPLETED", "FAILED", "ABORTED"]);
+/** Detail fetches after COMPLETED while the finish time is still missing (3 s apart, so about a minute). */
+const FINISH_TIME_POLLS = 20;
 
 interface Vars {
   key: string;
@@ -139,22 +144,49 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
     onSuccess: (q, vars) => setQuoteState({ key: vars.key, quote: q, notice: null }),
   });
 
-  // JobResultView polls this same query key once it mounts (every 3 s until
-  // terminal); subscribing here folds the persisted created_at and the
-  // finished_at into the job it shows, computed at render time.
+  // Times come from the same place as the Jobs page: our own job row
+  // (GET /api/lr/quantum/jobs), whose finishedAt is back-filled by a live
+  // detail fetch (jobs/[id]/route.ts). Some backends (seen on Rigetti) report
+  // COMPLETED before they report a finish time, and JobResultView stops
+  // polling at COMPLETED, so this keeps fetching the detail (same query key)
+  // until the finish time is known, up to a limit, then refreshes the row.
+  // Update count when the detail first came back terminal (set in the query's callback, not in render).
+  const terminalSince = useRef<number | null>(null);
   const { data: submittedJobDetail } = useQuery({
     queryKey: ["lr-job-detail", submittedJob?.uuid],
     queryFn: () => fetchQuantumJobDetail(submittedJob!.uuid),
     enabled: !!submittedJob,
     retry: 0,
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      const terminal = d && (d.isInTerminalState || TERMINAL.has(d.status));
+      if (!terminal) return 3000;
+      if (d.finishedAt) return false;
+      terminalSince.current ??= query.state.dataUpdateCount;
+      return query.state.dataUpdateCount - terminalSince.current >= FINISH_TIME_POLLS ? false : 3000;
+    },
   });
+  const detailTerminal =
+    !!submittedJobDetail && (submittedJobDetail.isInTerminalState || TERMINAL.has(submittedJobDetail.status));
+  const detailFinishedAt = submittedJobDetail?.finishedAt;
+  const { data: jobRows } = useQuery({
+    queryKey: ["lr-jobs-list"],
+    queryFn: fetchJobs,
+    enabled: !!submittedJob,
+  });
+  // The row only learns the finish time from a detail fetch: refresh it then.
+  useEffect(() => {
+    if (detailTerminal) queryClient.invalidateQueries({ queryKey: ["lr-jobs-list"] });
+  }, [detailTerminal, detailFinishedAt, queryClient]);
+  const row = submittedJob ? jobRows?.find((j) => j.jobId === submittedJob.uuid) : undefined;
   const displayedJob: Job | null = submittedJob
     ? {
         ...submittedJob,
-        created_at: submittedJobDetail?.persistedCreatedAt ?? submittedJob.created_at,
+        created_at: row?.createdAt ?? submittedJobDetail?.persistedCreatedAt ?? submittedJob.created_at,
         finished_at:
+          row?.finishedAt ??
           submittedJob.finished_at ??
-          (submittedJobDetail?.isInTerminalState ? submittedJobDetail.finishedAt : undefined),
+          (detailTerminal ? detailFinishedAt : undefined),
       }
     : null;
 
@@ -183,6 +215,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
   /** Back to the form after a result. */
   function reset() {
     setSubmittedJob(null);
+    terminalSince.current = null;
     submitMutation.reset();
   }
 

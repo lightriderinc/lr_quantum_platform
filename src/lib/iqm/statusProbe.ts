@@ -6,6 +6,7 @@ import type {
   ReadingKind,
   StatusMemory,
 } from "@/lib/backends/status/types";
+import { readIqmHealth } from "@/lib/iqm/health";
 import {
   IQM_BASE_URL,
   IQM_MACHINES,
@@ -105,14 +106,16 @@ function failedReading(
   };
 }
 
-function classifyHealth(
+/** Exported for tests. Accepts both of IQM's health shapes (lib/iqm/health.ts). */
+export function classifyHealth(
   body: unknown,
 ): Pick<Reading, "kind" | "healthStamp" | "detail"> {
-  if (!isRecord(body) || typeof body.healthy !== "boolean") {
+  const health = readIqmHealth(body);
+  if (!health) {
     return { kind: "schema_error", detail: "health response has no boolean `healthy`" };
   }
-  const stamp = typeof body.updated_at === "string" ? body.updated_at : null;
-  if (!body.healthy) return { kind: "unhealthy", healthStamp: stamp };
+  const stamp = health.updatedAt;
+  if (!health.healthy) return { kind: "unhealthy", healthStamp: stamp };
   // Freshness is the whole point of the health feed; without a usable stamp
   // a healthy flag can't be trusted as current.
   if (stamp === null || !Number.isFinite(Date.parse(stamp))) {

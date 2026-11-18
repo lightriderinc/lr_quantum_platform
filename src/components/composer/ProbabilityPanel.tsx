@@ -23,13 +23,10 @@ const fmtPct = (p: number) => {
 // outcomes. Bars use the same blue as the job results.
 export default function ProbabilityPanel({
   preview,
-  bits,
   measuredMidCircuit,
 }: {
   /** Null above PREVIEW_MAX_QUBITS: the chart is replaced by a note. */
   preview: ProbabilityPreview | null;
-  /** Length of each outcome's bitstring (the circuit's qubit count). */
-  bits: number;
   /** Qubits with a gate after their measurement: the preview treats every measurement as final. */
   measuredMidCircuit: number[];
 }) {
@@ -40,7 +37,7 @@ export default function ProbabilityPanel({
         <span className="text-xs text-gray-500">Ideal simulation, no noise</span>
       </div>
       {preview ? (
-        <Chart preview={preview} bits={bits} measuredMidCircuit={measuredMidCircuit} />
+        <Chart preview={preview} measuredMidCircuit={measuredMidCircuit} />
       ) : (
         <p className="py-10 text-center text-sm text-gray-500" data-preview-limit>
           Preview is available up to {PREVIEW_MAX_QUBITS} qubits. Run the circuit to see results.
@@ -52,14 +49,13 @@ export default function ProbabilityPanel({
 
 function Chart({
   preview,
-  bits,
   measuredMidCircuit,
 }: {
   preview: ProbabilityPreview;
-  bits: number;
   measuredMidCircuit: number[];
 }) {
-  const data = probabilityChartData(preview, bits);
+  const { bits } = preview;
+  const data = probabilityChartData(preview);
   const axisMax = chartAxisMax(Math.max(0, ...data.bars.map((b) => b.probability)));
   const showValues = data.bars.length <= 16;
   const verticalLabels = bits >= 3;

@@ -95,10 +95,7 @@ export default function BackendList({
                     </span>
                   )}
                   {!comingSoon && (
-                    <BackendAvailabilityBadge
-                      backend={backend}
-                      fallback={<span className="text-xs text-gray-400">—</span>}
-                    />
+                    <BackendAvailabilityBadge backend={backend} />
                   )}
                 </td>
               </tr>

@@ -38,6 +38,13 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // The dashboard is the home page; /dashboard was a 404. Temporary
+      // (307), so browsers don't cache it if a /dashboard page ever exists.
+      {
+        source: '/dashboard',
+        destination: '/',
+        permanent: false,
+      },
       {
         source: '/legal',
         destination: '/legal/privacy',

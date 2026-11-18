@@ -2,12 +2,11 @@
 
 import CopyButton from "@/components/ui/CopyButton";
 import DownloadButton from "@/components/ui/DownloadButton";
-import { formatQueueTime } from "@/lib/backends/availability";
+import { backendCondition, formatQueueTime } from "@/lib/backends/availability";
 import {
   fetchIonqDetails,
   formatCapabilityList,
   formatErrorPercent,
-  formatIonqStatus,
   formatMicroseconds,
   formatSeconds,
   formatTopology,
@@ -20,14 +19,6 @@ import type { Backend } from "@/types/backend";
 import { useQuery } from "@tanstack/react-query";
 
 type Row = { label: string; value: string | null | undefined };
-
-const STATUS_LABEL: Record<Backend["status"], string> = {
-  online: "Available",
-  paused: "Paused",
-  offline: "Offline",
-  maintenance: "Unavailable",
-  unknown: "Unknown",
-};
 
 /** Drops rows with no value, so a table never shows an empty cell. */
 function present(rows: Row[]): { label: string; value: string }[] {
@@ -91,18 +82,18 @@ export default function IonqBackendDetails({
   const description = data?.description ?? backend.details?.description;
   const queueMs = data?.average_queue_time_ms ?? backend.queueTimeMs ?? null;
   const isSimulator = data ? data.kind === "simulator" : backend.type === "Simulator";
+  const condition = backendCondition(backend);
 
   const specs: Row[] = [
     { label: "Provider", value: backend.providerLabel ?? backend.provider },
     { label: "Qubits", value: String(data?.qubits ?? backend.qubits) },
-    { label: "Predicted queue time", value: queueMs === null ? "Unknown" : formatQueueTime(queueMs) },
+    // No prediction while the backend can't take jobs.
     {
-      label: "Status",
-      value:
-        formatIonqStatus(data?.status, data?.degraded) ??
-        backend.statusInfo?.label ??
-        STATUS_LABEL[backend.status],
+      label: "Predicted queue time",
+      value: condition.blocked ? null : queueMs === null ? "Unknown" : formatQueueTime(queueMs),
     },
+    // Same condition as the card and header badge, so they never disagree.
+    { label: "Status", value: condition.label },
     { label: "Noise model", value: isSimulator ? (data?.noise_model ?? backend.noiseModel) : null },
   ];
 

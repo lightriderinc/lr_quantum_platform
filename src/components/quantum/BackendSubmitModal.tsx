@@ -7,6 +7,8 @@ import JobSubmitControls from "@/components/quantum/JobSubmitControls";
 import ShotsInput from "@/components/quantum/ShotsInput";
 import LRButton from "@/components/ui/LRButton";
 import { useJobSubmission } from "@/hooks/useJobSubmission";
+import { useRunnableBackends } from "@/hooks/useRunnableBackends";
+import { backendCondition } from "@/lib/backends/availability";
 import {
   CIRCUIT_SECTIONS,
   circuitTemplate,
@@ -15,7 +17,7 @@ import {
   type BuiltCircuit,
   type CircuitTemplateId,
 } from "@/lib/circuits/templates";
-import { QUANTUM_BACKENDS, type QuantumBackendId } from "@/lib/quantum/backends";
+import { getQuantumBackendId, QUANTUM_BACKENDS, type QuantumBackendId } from "@/lib/quantum/backends";
 import { useEffect, useState } from "react";
 import { MdArrowLeft, MdClose } from "react-icons/md";
 
@@ -73,6 +75,12 @@ export default function BackendSubmitModal({
     gate: selection.id,
   });
   const { blockedByCredits, stillCheckingCredits, submittedJob, displayedJob } = submission;
+  // Live status, from the same catalog as the Backends page: an Offline or
+  // Unavailable backend can't be submitted to.
+  const { runnable } = useRunnableBackends();
+  const live = runnable.find((b) => getQuantumBackendId(b.id) === backend);
+  const condition = live ? backendCondition(live) : null;
+  const unavailable = condition?.blocked ?? false;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -84,7 +92,7 @@ export default function BackendSubmitModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    submission.submit();
+    if (!unavailable) submission.submit();
   }
 
   return (
@@ -178,6 +186,12 @@ export default function BackendSubmitModal({
 
                   <ShotsInput value={shots} onChange={setShots} onBlur={submission.checkShots} error={submission.shotsError} />
 
+                  {unavailable && (
+                    <p className="text-sm text-red-600" data-backend-unavailable>
+                      {QUANTUM_BACKENDS[backend].name}: {condition?.label}
+                    </p>
+                  )}
+
                   <JobSubmitControls submission={submission} />
 
                   <div className="flex justify-end gap-3 pt-1">
@@ -187,7 +201,7 @@ export default function BackendSubmitModal({
                     <LRButton
                       variant="primary"
                       type="submit"
-                      disabled={!submission.canSubmit}
+                      disabled={!submission.canSubmit || unavailable}
                     >
                       {submission.submitLabel}
                     </LRButton>

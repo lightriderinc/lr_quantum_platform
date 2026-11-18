@@ -51,12 +51,13 @@ export default function GatePalette({
                       e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload));
                       e.dataTransfer.effectAllowed = "copy";
                     }}
-                    onClick={() => onPick(active ? null : g.name)}
+                    // Clicking the picked gate again keeps it picked; Esc drops it.
+                    onClick={() => onPick(g.name)}
                     aria-pressed={active}
                     aria-describedby={tipId}
                     className={`min-w-10 cursor-grab default-radius border px-2 py-1.5 font-mono text-sm font-semibold transition-shadow ${
                       GATE_COLORS[g.color].box
-                    } ${active ? "ring-2 ring-[var(--brand-primary)] ring-offset-1" : "hover:shadow-sm"}`}
+                    } ${active ? "ring-2 ring-[var(--brand-primary)] ring-offset-2 shadow-inner brightness-95" : "hover:shadow-sm"}`}
                   >
                     {g.label}
                   </button>

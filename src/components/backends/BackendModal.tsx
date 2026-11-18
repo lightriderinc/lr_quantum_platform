@@ -2,8 +2,7 @@
 
 import BackendSubmitModal from "@/components/quantum/BackendSubmitModal";
 import {
-  availabilityTextClass,
-  formatAvailability,
+  backendCondition,
   formatQueue,
   formatQueueTime,
 } from "@/lib/backends/availability";
@@ -16,7 +15,7 @@ import { MdClose } from "react-icons/md";
 import { RiExpandDiagonalFill } from "react-icons/ri";
 import InfoBox from "../InfoBox";
 import BackendConnectSection from "./BackendConnectSection";
-import BackendStatusBadge from "./BackendStatusBadge";
+import BackendAvailabilityBadge from "./BackendAvailabilityBadge";
 import IonqBackendDetails from "./IonqBackendDetails";
 import QubitMap from "./QubitMap";
 
@@ -47,7 +46,6 @@ export default function BackendModal({
 
   const {
     name,
-    status,
     queueDepth,
     type,
     qubits,
@@ -64,7 +62,8 @@ export default function BackendModal({
 
   const pct = (n?: number) => (n != null ? `${n} %` : undefined);
   const us = (n?: number) => (n != null ? `${n} µs` : undefined);
-  const availabilityLabel = formatAvailability(availability);
+  // Same condition as the header badge, so the two never disagree.
+  const condition = backendCondition(backend);
 
   const specs: Spec[] = (
     [
@@ -77,13 +76,13 @@ export default function BackendModal({
       },
       {
         label: "Predicted queue time",
-        value: queueTimeMs != null ? formatQueueTime(queueTimeMs) : null,
+        value: queueTimeMs != null && !condition.blocked ? formatQueueTime(queueTimeMs) : null,
       },
       {
         label: "Availability",
-        value: availabilityLabel ? (
-          <span className={availabilityTextClass(availability)}>
-            {availabilityLabel}
+        value: availability ? (
+          <span className={condition.tone === "available" ? "text-emerald-600" : "text-gray-400"}>
+            {condition.label}
           </span>
         ) : null,
       },
@@ -145,7 +144,7 @@ export default function BackendModal({
 
         <div className="mb-6 flex flex-wrap items-end gap-x-6 gap-y-2 pr-12">
           <h1 className="text-2xl font-semibold">{name}</h1>
-          <BackendStatusBadge status={status} info={backend.statusInfo} />
+          <BackendAvailabilityBadge backend={backend} plain />
           {/* Only the real Cepheus-1-108Q device (not its mock or the
               reservation card) has topology/calibration data — LR-TECH-001
               Phase 6. */}

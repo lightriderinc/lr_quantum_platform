@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  summarizeAvailability,
-  type AvailabilityTone,
-} from "@/lib/backends/availability";
+import { backendCondition, type AvailabilityTone } from "@/lib/backends/availability";
 import { describeStatus } from "@/lib/backends/status/present";
 import {
   isReservationOnlyBackend,
@@ -11,7 +8,6 @@ import {
 } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { MdArrowForward } from "react-icons/md";
 
 // Same dot + text treatment as BackendStatusBadge, so the catalog keeps its
@@ -22,19 +18,19 @@ const TONE_STYLES: Record<AvailabilityTone, { dot: string; text: string }> = {
   unknown: { dot: "border border-gray-400 bg-transparent", text: "text-gray-400" },
 };
 
-// What a catalog card or list row shows for a backend: whether it can run a
-// job now, or when it next can (see summarizeAvailability). The
-// reservation-only Cepheus QPU gets a booking link instead, since it only runs
-// jobs in a reserved slot. `fallback` renders when the provider doesn't report
-// availability (e.g. a dash in a table cell).
+// What every surface shows for a backend: the shared backendCondition (so
+// status and availability never disagree). The reservation-only Cepheus QPU
+// gets a booking link instead in the catalog, since it only runs jobs in a
+// reserved slot; pickers pass `plain` to show its condition instead.
 export default function BackendAvailabilityBadge({
   backend,
-  fallback = null,
+  plain = false,
 }: {
   backend: Backend;
-  fallback?: ReactNode;
+  /** Always the condition label, never the booking link (inside a radio label, for example). */
+  plain?: boolean;
 }) {
-  if (isReservationOnlyBackend(backend.id)) {
+  if (!plain && isReservationOnlyBackend(backend.id)) {
     return (
       <Link
         href={RESERVATION_PAGE_HREF}
@@ -49,13 +45,11 @@ export default function BackendAvailabilityBadge({
     );
   }
 
-  const summary = summarizeAvailability(backend);
-  if (!summary) return <>{fallback}</>;
-
-  const style = TONE_STYLES[summary.tone];
+  const condition = backendCondition(backend);
+  const style = TONE_STYLES[condition.tone];
   // When it isn't available, the status light's reason says why.
   const reason =
-    summary.tone !== "available" && backend.statusInfo
+    condition.tone !== "available" && backend.statusInfo
       ? describeStatus(backend.status, backend.statusInfo)
       : undefined;
 
@@ -65,7 +59,7 @@ export default function BackendAvailabilityBadge({
       title={reason}
     >
       <span className={`h-2 w-2 rounded-full ${style.dot}`} aria-hidden="true" />
-      {summary.label}
+      {condition.label}
     </span>
   );
 }

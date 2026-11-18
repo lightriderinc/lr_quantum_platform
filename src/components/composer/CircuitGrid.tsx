@@ -22,13 +22,16 @@ export interface PendingGate {
 
 // The circuit grid: one row per qubit, one column per step. Empty cells
 // place the picked gate (or a dropped one); placed gates can be selected,
-// dragged to another spot, or removed with their x. Drawn with positioned
+// dragged to another spot, or removed with their x. While a gate is picked
+// (`placing`), clicking or dropping on a placed gate places there instead,
+// replacing it (see editor.ts). Drawn with positioned
 // elements rather than SVG so every cell and gate is a real button. When the
 // circuit is small enough to simulate, each line ends in a circle filled by
 // that qubit's probability of reading 1.
 export default function CircuitGrid({
   circuit,
   pending,
+  placing,
   selectedId,
   onCellClick,
   onDropPayload,
@@ -40,6 +43,8 @@ export default function CircuitGrid({
   /** Per-qubit state from the preview simulation; null above the preview limit (no indicators). */
   qubitStates: QubitSummary[] | null;
   pending: PendingGate | null;
+  /** A palette gate is picked (or a two-qubit gate waits for its second qubit): clicks on placed gates place, not select. */
+  placing: boolean;
   selectedId: string | null;
   onCellClick: (qubit: number, column: number) => void;
   onDropPayload: (payload: DragPayload, qubit: number, column: number) => void;
@@ -117,7 +122,11 @@ export default function CircuitGrid({
               selected={gate.id === selectedId}
               left={colLeft(gate.column)}
               rowCenter={rowCenter}
-              onSelect={() => onSelectGate(gate.id)}
+              onSelect={(qubit) => (placing ? onCellClick(qubit, gate.column) : onSelectGate(gate.id))}
+              onDrop={(e, qubit) => {
+                const payload = readDrop(e);
+                if (payload) onDropPayload(payload, qubit, gate.column);
+              }}
               onRemove={() => onRemoveGate(gate.id)}
             />
           ))}
@@ -185,6 +194,7 @@ function GateMark({
   left,
   rowCenter,
   onSelect,
+  onDrop,
   onRemove,
 }: {
   gate: PlacedGate;
@@ -192,7 +202,9 @@ function GateMark({
   selected: boolean;
   left: number;
   rowCenter: (q: number) => number;
-  onSelect: () => void;
+  /** With the qubit row under the pointer. */
+  onSelect: (qubit: number) => void;
+  onDrop: (e: React.DragEvent, qubit: number) => void;
   onRemove: () => void;
 }) {
   const def = gateDef(gate.name);
@@ -203,15 +215,26 @@ function GateMark({
   const label =
     gate.name === "measure" ? "Measure" : `${def.label}${gate.params?.length ? `(${formatAngle(gate.params[0])})` : ""}`;
   const where = gate.qubits.map((q) => `q[${q}]`).join(", ");
+  // The qubit row under the pointer, within the gate's span.
+  const rowAt = (el: Element, clientY: number) => {
+    const rect = el.getBoundingClientRect();
+    return lo + Math.min(hi - lo, Math.max(0, Math.floor((clientY - rect.top) / CELL)));
+  };
 
   return (
     <div
       className="group absolute"
       style={{ left, top, width: CELL, height: spanHeight }}
       draggable
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(DRAG_TYPE)) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(e, rowAt(e.currentTarget, e.clientY));
+      }}
       onDragStart={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const grabbedQubit = lo + Math.min(hi - lo, Math.max(0, Math.floor((e.clientY - rect.top) / CELL)));
+        const grabbedQubit = rowAt(e.currentTarget, e.clientY);
         const payload: DragPayload = { kind: "move", id: gate.id, grabbedQubit };
         e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(payload));
         e.dataTransfer.effectAllowed = "move";
@@ -219,7 +242,7 @@ function GateMark({
     >
       <button
         type="button"
-        onClick={onSelect}
+        onClick={(e) => onSelect(e.clientY ? rowAt(e.currentTarget, e.clientY) : lo)}
         aria-label={`${label} on ${gate.name === "barrier" ? "every qubit" : where}`}
         aria-pressed={selected}
         className="absolute inset-0 cursor-pointer"

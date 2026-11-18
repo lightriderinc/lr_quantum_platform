@@ -138,3 +138,28 @@ export function summarizeAvailability(
   }
   return { label: "Unavailable", tone: "unavailable" };
 }
+
+export interface BackendCondition extends AvailabilitySummary {
+  /** Offline or Unavailable: can't run a job now and isn't waiting for a window. Greyed out and not selectable where jobs are submitted. */
+  blocked: boolean;
+}
+
+// The one state every surface shows for a backend (catalog card and row,
+// detail modal, composer run panel, submit popups), so a status light and an
+// availability line can never disagree ("Offline" next to "Available now").
+// A provider-reported outage wins over any schedule; otherwise the schedule
+// (summarizeAvailability) decides; providers with no schedule fall back to
+// the status light alone. "Available Fri, 2:45 AM" (healthy, between
+// windows) isn't blocked: a job submitted now waits for that window.
+export function backendCondition(
+  backend: Pick<Backend, "availability" | "status" | "statusInfo">,
+): BackendCondition {
+  const { status } = backend;
+  if (status === "offline") return { label: "Offline", tone: "unavailable", blocked: true };
+  if (status === "maintenance") return { label: "Maintenance", tone: "unavailable", blocked: true };
+  const summary = summarizeAvailability(backend);
+  if (summary) return { ...summary, blocked: summary.label === "Unavailable" };
+  if (status === "online") return { label: "Available now", tone: "available", blocked: false };
+  if (status === "paused") return { label: "Unavailable", tone: "unavailable", blocked: true };
+  return { label: backend.statusInfo?.label ?? "Unknown", tone: "unknown", blocked: false };
+}

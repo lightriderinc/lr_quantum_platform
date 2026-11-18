@@ -191,9 +191,21 @@ describe("statevector preview", () => {
     expect(probs({ numQubits: 2, gates: [g("x", [0], 0), g("measure", [0], 1), g("measure", [1], 1)] })).toEqual({ "01": 1 });
   });
 
-  test("only measured qubits; unmeasured bits read 0", () => {
-    const c: Circuit = { numQubits: 2, gates: [g("x", [1], 0), g("h", [0], 0), g("measure", [0], 1)] };
-    expect(probs(c)).toEqual({ "00": 0.5, "01": 0.5 });
+  test("only the bits a measurement writes, highest on the left", () => {
+    // Bell pair, only q1 measured: "0" and "1", not "00" and "10".
+    const bellQ1: Circuit = { numQubits: 2, gates: [g("h", [0], 0), g("cx", [0, 1], 1), g("measure", [1], 2)] };
+    expect(probs(bellQ1)).toEqual({ "0": 0.5, "1": 0.5 });
+    expect(outcomeProbabilities(bellQ1).bits).toBe(1);
+    // X on q0 and q2, measure q0..q2 of four qubits: "101", not "0101".
+    const c: Circuit = {
+      numQubits: 4,
+      gates: [g("x", [0], 0), g("x", [2], 0), g("x", [3], 0), g("measure", [0], 1), g("measure", [1], 1), g("measure", [2], 1)],
+    };
+    expect(probs(c)).toEqual({ "101": 1 });
+    // Gaps keep their order: q3 and q0 measured, q3 is the left bit.
+    const gap: Circuit = { numQubits: 4, gates: [g("x", [3], 0), g("measure", [0], 1), g("measure", [3], 1)] };
+    expect(probs(gap)).toEqual({ "10": 1 });
+    expect(probabilityChartData(outcomeProbabilities(gap)).bars.map((b) => b.outcome)).toEqual(["00", "01", "10", "11"]);
   });
 
   test("no measurements: every qubit", () => {
@@ -312,7 +324,6 @@ describe("editor", () => {
     let s = start();
     s = editorReducer(s, { type: "place", name: "h", qubits: [0], column: 0 });
     const before = s;
-    s = editorReducer(s, { type: "place", name: "x", qubits: [0], column: 0 }); // taken
     s = editorReducer(s, { type: "place", name: "cx", qubits: [0, 0], column: 3 }); // same qubit twice
     s = editorReducer(s, { type: "place", name: "x", qubits: [5], column: 3 }); // no such qubit
     s = editorReducer(s, { type: "undo" });
@@ -320,10 +331,32 @@ describe("editor", () => {
     expect(s.present).toBe(before.present);
   });
 
-  test("a two-qubit gate blocks the rows between its qubits", () => {
-    const c = applyEdit({ numQubits: 3, gates: [] }, { type: "place", name: "cx", qubits: [0, 2], column: 0 });
-    expect(applyEdit(c, { type: "place", name: "h", qubits: [1], column: 0 })).toBe(c);
-    expect(applyEdit(c, { type: "place", name: "h", qubits: [1], column: 1 }).gates).toHaveLength(2);
+  test("placing on a taken spot replaces what it overlaps, as one undo step", () => {
+    let s = start({ numQubits: 3, gates: [] });
+    s = editorReducer(s, { type: "place", name: "h", qubits: [0], column: 0 });
+    s = editorReducer(s, { type: "place", name: "z", qubits: [2], column: 0 });
+    s = editorReducer(s, { type: "place", name: "x", qubits: [0], column: 0 });
+    expect(s.present.gates.map((x) => [x.name, x.qubits[0]])).toEqual([["z", 2], ["x", 0]]);
+    s = editorReducer(s, { type: "undo" });
+    expect(s.present.gates.map((x) => x.name)).toEqual(["h", "z"]);
+    s = editorReducer(s, { type: "redo" });
+
+    // A two-qubit gate spans the rows between its qubits: placing on q[1]
+    // replaces cx q[0]->q[2]; placing the cx back replaces everything it spans.
+    s = editorReducer(s, { type: "place", name: "cx", qubits: [0, 2], column: 0 });
+    expect(s.present.gates.map((x) => x.name)).toEqual(["cx"]);
+    s = editorReducer(s, { type: "place", name: "h", qubits: [1], column: 0 });
+    expect(s.present.gates.map((x) => x.name)).toEqual(["h"]);
+    expect(applyEdit(s.present, { type: "place", name: "h", qubits: [2], column: 0 }).gates).toHaveLength(2);
+  });
+
+  test("moving onto a taken spot replaces it too", () => {
+    let c = applyEdit({ numQubits: 2, gates: [] }, { type: "place", name: "h", qubits: [0], column: 0 });
+    c = applyEdit(c, { type: "place", name: "x", qubits: [0], column: 1 });
+    const h = c.gates[0].id;
+    c = applyEdit(c, { type: "move", id: h, qubits: [0], column: 1 });
+    expect(c.gates).toHaveLength(1);
+    expect(c.gates[0]).toMatchObject({ id: h, column: 1 });
   });
 
   test("rotations get a default angle of pi/2, and setParams changes it", () => {
@@ -406,7 +439,7 @@ describe("editor", () => {
 
     // Grover and Bernstein-Vazirani give their answers in the composer too.
     expect(probs(load("grover-2"))["11"]).toBeCloseTo(1, 10);
-    expect(Object.keys(probs(load("bv-101")))).toEqual(["0101"]);
+    expect(Object.keys(probs(load("bv-101")))).toEqual(["101"]);
   });
 
   test("GHZ (all qubits): a CNOT chain across the current qubit count", () => {

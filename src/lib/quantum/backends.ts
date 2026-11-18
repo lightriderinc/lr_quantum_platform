@@ -88,7 +88,9 @@ export const QUANTUM_BACKENDS = {
     name: "IQM Sirius",
     deviceInstance: "sirius",
     maxShots: DEFAULT_MAX_SHOTS,
-    maxQubits: 20,
+    // 24 qubits on the chip, 16 calibrated (IQM Resonance and the default
+    // calibration set, 2026-11-18). Only calibrated qubits run jobs.
+    maxQubits: 16,
     costPerShotCents: 0.2, // $0.002/shot ($2 per 1,000 shots)
   },
   "rigetti-cepheus-mock": {

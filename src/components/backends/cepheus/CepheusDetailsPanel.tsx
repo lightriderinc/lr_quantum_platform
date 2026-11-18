@@ -1,9 +1,5 @@
-import BackendStatusBadge from "@/components/backends/BackendStatusBadge";
-import {
-  availabilityTextClass,
-  formatAvailability,
-  formatQueue,
-} from "@/lib/backends/availability";
+import BackendAvailabilityBadge from "@/components/backends/BackendAvailabilityBadge";
+import { backendCondition, formatQueue } from "@/lib/backends/availability";
 import type { Backend } from "@/types/backend";
 
 type Spec = { label: string; value: React.ReactNode };
@@ -13,25 +9,25 @@ type Spec = { label: string; value: React.ReactNode };
 // (BackendModal shows status as a badge next to the title only; here it's
 // also one of the listed items since there's no modal header to put it in).
 export default function CepheusDetailsPanel({ backend }: { backend: Backend }) {
-  const { status, queueDepth, type, qubits, provider, pricing, availability } = backend;
+  const { queueDepth, type, qubits, provider, pricing, availability } = backend;
   const d = backend.details ?? {};
 
   const pct = (n?: number) => (n != null ? `${n} %` : undefined);
   const us = (n?: number) => (n != null ? `${n} µs` : undefined);
-  const availabilityLabel = formatAvailability(availability);
+  const condition = backendCondition(backend);
 
   const specs: Spec[] = (
     [
-      { label: "Status", value: <BackendStatusBadge status={status} /> },
+      { label: "Status", value: <BackendAvailabilityBadge backend={backend} plain /> },
       { label: "Type", value: type },
       { label: "Qubits", value: qubits },
       { label: "Provider", value: provider },
       { label: "Queue", value: queueDepth !== null ? formatQueue(queueDepth) : null },
       {
         label: "Availability",
-        value: availabilityLabel ? (
-          <span className={availabilityTextClass(availability)}>
-            {availabilityLabel}
+        value: availability ? (
+          <span className={condition.tone === "available" ? "text-emerald-600" : "text-gray-400"}>
+            {condition.label}
           </span>
         ) : null,
       },

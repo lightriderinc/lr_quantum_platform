@@ -110,14 +110,16 @@ export interface OutcomeProbability {
 export interface ProbabilityPreview {
   /** "measured": over the classical bits the measurements write; "all": no measurements, so over every qubit. */
   basis: "measured" | "all";
+  /** Length of every outcome string: the measured bits, or every qubit with no measurements. */
+  bits: number;
   outcomes: OutcomeProbability[];
 }
 
 /**
  * Outcome probabilities, largest first, dropping ones below 1e-10. With
- * measurements, keys are the circuit's classical bits (one per qubit,
- * unmeasured bits read 0), matching what a job returns; without any, keys
- * are every qubit.
+ * measurements, keys are only the classical bits a measurement writes,
+ * highest bit on the left (measuring q0 and q2 of four gives "101", not
+ * "0101"); without any, keys are every qubit.
  */
 export function outcomeProbabilities(circuit: Circuit, state: Statevector = simulate(circuit)): ProbabilityPreview {
   const n = circuit.numQubits;
@@ -127,6 +129,13 @@ export function outcomeProbabilities(circuit: Circuit, state: Statevector = simu
     if (g.name === "measure") clbitSource.set(g.qubits[0], g.qubits[0]);
   }
   const basis = clbitSource.size > 0 ? "measured" : "all";
+  // Written bits, highest first: the left-to-right order of the label.
+  const written = [...clbitSource.keys()].sort((a, b) => b - a);
+  const bits = basis === "measured" ? written.length : n;
+  const label = (key: number) =>
+    basis === "measured"
+      ? written.map((clbit) => ((key >> clbit) & 1 ? "1" : "0")).join("")
+      : key.toString(2).padStart(n, "0");
   const sums = new Map<number, number>();
   for (let i = 0; i < state.re.length; i++) {
     const p = state.re[i] * state.re[i] + state.im[i] * state.im[i];
@@ -140,9 +149,9 @@ export function outcomeProbabilities(circuit: Circuit, state: Statevector = simu
   }
   const outcomes = [...sums.entries()]
     .filter(([, p]) => p > 1e-10)
-    .map(([key, p]) => ({ outcome: key.toString(2).padStart(n, "0"), probability: p }))
+    .map(([key, p]) => ({ outcome: label(key), probability: p }))
     .sort((a, b) => b.probability - a.probability || a.outcome.localeCompare(b.outcome));
-  return { basis, outcomes };
+  return { basis, bits, outcomes };
 }
 
 // --- Per-qubit state (the indicator at the end of each qubit line) ---------
@@ -207,7 +216,7 @@ export interface ChartData {
   nonZero: number;
 }
 
-export function probabilityChartData(preview: ProbabilityPreview, bits: number): ChartData {
+export function probabilityChartData(preview: ProbabilityPreview, bits: number = preview.bits): ChartData {
   const nonZero = preview.outcomes.length;
   if (bits <= CHART_ALL_STATES_MAX_BITS) {
     const byOutcome = new Map(preview.outcomes.map((o) => [o.outcome, o.probability]));

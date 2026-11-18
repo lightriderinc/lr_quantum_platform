@@ -1,5 +1,7 @@
 "use client";
 
+import { useRunnableBackends } from "@/hooks/useRunnableBackends";
+import { backendCondition } from "@/lib/backends/availability";
 import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
 import {
   circuitStats,
@@ -35,7 +37,7 @@ import CircuitGrid, { type PendingGate } from "./CircuitGrid";
 import GatePalette, { type DragPayload } from "./GatePalette";
 import ProbabilityPanel from "./ProbabilityPanel";
 import QasmPanel from "./QasmPanel";
-import RunPanel, { useRunnableBackends } from "./RunPanel";
+import RunPanel from "./RunPanel";
 
 // A Bell pair to start from, so the preview and QASM show something useful
 // straight away. Fixed ids keep the server and client render identical.
@@ -71,10 +73,17 @@ export default function Composer({
   const [angleText, setAngleText] = useState("pi/2");
   const [pending, setPending] = useState<PendingGate | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The template last loaded, and the exact circuit it produced: the
+  // Templates button shows its name until the circuit changes (any edit or
+  // clear makes a new circuit object).
+  const [loadedTemplate, setLoadedTemplate] = useState<{ name: string; circuit: Circuit } | null>(null);
   // Backend chosen in the run panel: its qubit count is the editor's limit.
   const [backendId, setBackendId] = useState<string | null>(null);
   const { runnable } = useRunnableBackends();
   const chosenBackend = runnable.find((b) => b.id === backendId) ?? null;
+  // The chosen backend went Offline or Unavailable: drop the choice, so
+  // nothing can be submitted to it (set during render, no effect needed).
+  if (chosenBackend && backendCondition(chosenBackend).blocked) setBackendId(null);
   const maxQubits = maxQubitsFor(chosenBackend);
 
   const angle = parseAngle(angleText);
@@ -179,6 +188,7 @@ export default function Composer({
     } else if (e.key === "Escape") {
       setPending(null);
       setSelectedId(null);
+      setTool(null);
     }
   });
   useEffect(() => {
@@ -261,9 +271,12 @@ export default function Composer({
               <TemplatesMenu
                 maxQubits={maxQubits}
                 numQubits={circuit.numQubits}
-                onLoad={(templatePayload) => {
+                loadedName={loadedTemplate?.circuit === circuit ? loadedTemplate.name : null}
+                onLoad={(templatePayload, name) => {
                   // Built by the menu, not the reducer: Haar templates draw new angles on each load.
-                  dispatch({ type: "template", circuit: fromLrCircuit(templatePayload, newGateId) });
+                  const loaded = fromLrCircuit(templatePayload, newGateId);
+                  dispatch({ type: "template", circuit: loaded });
+                  setLoadedTemplate({ name, circuit: loaded });
                   setSelectedId(null);
                   setPending(null);
                 }}
@@ -308,6 +321,7 @@ export default function Composer({
               <CircuitGrid
                 circuit={circuit}
                 pending={pending}
+                placing={tool !== null || pending !== null}
                 selectedId={selectedId}
                 onCellClick={handleCellClick}
                 onDropPayload={handleDrop}
@@ -336,7 +350,7 @@ export default function Composer({
           </div>
         </section>
 
-        <ProbabilityPanel preview={simulation?.preview ?? null} bits={circuit.numQubits} measuredMidCircuit={lateMeasures} />
+        <ProbabilityPanel preview={simulation?.preview ?? null} measuredMidCircuit={lateMeasures} />
         <QasmPanel qasm={qasm} />
       </div>
 
@@ -360,11 +374,14 @@ export default function Composer({
 function TemplatesMenu({
   maxQubits,
   numQubits,
+  loadedName,
   onLoad,
 }: {
   maxQubits: number;
   numQubits: number;
-  onLoad: (payload: QuantumCircuitPayload) => void;
+  /** Name of the template the circuit still matches, shown on the button. */
+  loadedName: string | null;
+  onLoad: (payload: QuantumCircuitPayload, name: string) => void;
 }) {
   const templates = templatesForQubits(maxQubits);
   const [open, setOpen] = useState(false);
@@ -375,7 +392,7 @@ function TemplatesMenu({
       type="button"
       role="menuitem"
       onClick={() => {
-        onLoad(build());
+        onLoad(build(), name);
         setOpen(false);
       }}
       className="block w-full cursor-pointer default-radius px-3 py-1.5 text-left hover:bg-gray-50"
@@ -405,12 +422,14 @@ function TemplatesMenu({
     <div ref={ref} className="relative shrink-0">
       <button
         type="button"
-        className={toolButton}
+        className={`${toolButton} max-w-64`}
         aria-haspopup="menu"
         aria-expanded={open}
+        title={loadedName ? `Templates: ${loadedName}` : undefined}
         onClick={() => setOpen((v) => !v)}
       >
-        Templates <MdExpandMore />
+        <span className="truncate">{loadedName ? `Templates: ${loadedName}` : "Templates"}</span>
+        <MdExpandMore className="shrink-0" />
       </button>
       {open && (
         <div

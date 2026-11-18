@@ -1,5 +1,5 @@
 import TiltCard from "@/components/ui/TiltCard";
-import { formatQueue, formatQueueTime } from "@/lib/backends/availability";
+import { backendCondition, formatQueue, formatQueueTime } from "@/lib/backends/availability";
 import { getQuantumBackendId } from "@/lib/quantum/backends";
 import { isReservationCatalogId } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
@@ -20,8 +20,9 @@ export default function BackendCard({
   onSelect?: (backend: Backend) => void;
 }) {
   const { name, type, qubits, provider, queueDepth, queueTimeMs, noiseModel } = backend;
-  // Providers that report a predicted queue time (IonQ) get their own row.
-  const hasQueueTime = queueTimeMs !== undefined;
+  // Providers that report a predicted queue time (IonQ) get their own row,
+  // except while the backend is unavailable: no prediction applies then.
+  const hasQueueTime = queueTimeMs !== undefined && !backendCondition(backend).blocked;
   // The reservation card is a real, bookable access path today even though
   // it has no QUANTUM_BACKENDS submission mapping of its own (see
   // reservations.ts) — it isn't "coming soon" like a genuinely unmapped card.

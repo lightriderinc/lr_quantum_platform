@@ -1,6 +1,6 @@
 "use client";
 
-import BackendStatusBadge from "@/components/backends/BackendStatusBadge";
+import BackendAvailabilityBadge from "@/components/backends/BackendAvailabilityBadge";
 import type { AvailableSlot, ReservationDuration } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
 import { useEffect, useState } from "react";
@@ -61,7 +61,7 @@ export default function ReservationBackendModal({
 
         <div className="mb-2 flex flex-wrap items-center gap-x-6 gap-y-2 pr-12">
           <h1 className="text-2xl font-semibold">{backend.name}</h1>
-          <BackendStatusBadge status={backend.status} />
+          <BackendAvailabilityBadge backend={backend} plain />
         </div>
         {backend.details?.description && (
           <p className="mb-6 max-w-xl text-sm leading-relaxed text-gray-600">

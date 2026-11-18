@@ -5,6 +5,7 @@ import type {
 } from "@/types/backend";
 import { asMicroseconds, asPercent, median } from "@/lib/metrics";
 import { deriveAvailability } from "@/lib/backends/availability";
+import { readIqmHealth } from "@/lib/iqm/health";
 import { IQM_MACHINES, iqmBackendId, type IqmMachine } from "@/lib/iqm/machines";
 
 // Live IQM Resonance integration. Fetches each machine's static architecture
@@ -29,9 +30,23 @@ interface MetricsResponse {
   observations: MetricObservation[];
 }
 
-interface HealthResponse {
-  healthy: boolean;
-  updated_at: string;
+// The default calibration set's gates per qubit. A QPU can have more physical
+// qubits than are calibrated (Sirius: 24 on the chip, 16 calibrated on
+// 2026-11-18); IQM Resonance lists the calibrated ones, and only those run jobs.
+interface DynamicArchitecture {
+  qubits?: string[];
+  gates?: Record<string, { default_implementation?: string; implementations?: Record<string, { loci?: string[][] }> }>;
+}
+
+/** Qubits with a calibrated single-qubit gate (prx), or null when the response can't tell. */
+export function calibratedQubitCount(dqa: unknown): number | null {
+  const gates = (dqa as DynamicArchitecture | null)?.gates;
+  const prx = gates?.prx;
+  if (!prx?.implementations) return null;
+  const impl = (prx.default_implementation && prx.implementations[prx.default_implementation]) || Object.values(prx.implementations)[0];
+  const loci = impl?.loci;
+  if (!Array.isArray(loci)) return null;
+  return new Set(loci.map((l) => (Array.isArray(l) ? l[0] : null)).filter(Boolean)).size;
 }
 
 // IQM's public queue + availability feed for a machine. `queue_length` is the
@@ -71,18 +86,21 @@ const lastConfirmedStatus = new Map<
   { status: BackendStatus; at: number }
 >();
 
-// Derives availability from a health reading:
-//   unhealthy flag                -> offline
+// Derives availability from a health response (either IQM shape, see
+// lib/iqm/health.ts):
+//   unhealthy                     -> offline
 //   healthy + fresh timestamp     -> online
 //   healthy + stale timestamp     -> unknown (still reporting healthy, but the
 //                                    data has gone stale, so we can't confirm)
-//   no reading / unparseable time -> unknown (couldn't tell)
-function deriveStatus(health: HealthResponse | null): BackendStatus {
+//   no reading, no `healthy` flag,
+//   or unparseable time           -> unknown (couldn't tell; never offline)
+export function deriveStatus(body: unknown, now = Date.now()): BackendStatus {
+  const health = readIqmHealth(body);
   if (!health) return "unknown";
   if (!health.healthy) return "offline";
-  const updatedMs = Date.parse(health.updated_at);
+  const updatedMs = health.updatedAt ? Date.parse(health.updatedAt) : Number.NaN;
   if (Number.isNaN(updatedMs)) return "unknown";
-  return Date.now() - updatedMs > HEALTH_STALE_MS ? "unknown" : "online";
+  return now - updatedMs > HEALTH_STALE_MS ? "unknown" : "online";
 }
 
 // Smooths the raw per-reading status with a short memory so a single
@@ -119,6 +137,7 @@ function mapMachine(
   status: BackendStatus,
   queueDepth: number | null,
   availability: BackendAvailability | undefined,
+  calibratedQubits: number | null,
 ): Backend {
   const arch = Array.isArray(architecture) ? architecture[0] : architecture;
   const valid = (metrics?.observations ?? []).filter(
@@ -171,7 +190,7 @@ function mapMachine(
     name,
     type: machine.type,
     status,
-    qubits: arch?.qubits?.length ?? 0,
+    qubits: calibratedQubits ?? arch?.qubits?.length ?? 0,
     provider: "IQM",
     queueDepth,
     availability,
@@ -222,10 +241,10 @@ async function fetchMachines(withMetrics: boolean): Promise<Backend[]> {
       // failure degrades gracefully (unknown status / omitted queue) rather
       // than dropping the whole machine.
       const healthPromise = isQpu
-        ? getJson<HealthResponse>(
+        ? getJson<unknown>(
             `/api/iqm/api/v1/quantum-computers/${machine.alias}/health`,
           ).catch(() => null)
-        : Promise.resolve<HealthResponse | null>(null);
+        : Promise.resolve<unknown>(null);
 
       const queuePromise = isQpu
         ? getJson<QueueAvailabilityResponse>(
@@ -233,7 +252,14 @@ async function fetchMachines(withMetrics: boolean): Promise<Backend[]> {
           ).catch(() => null)
         : Promise.resolve<QueueAvailabilityResponse | null>(null);
 
-      const [architecture, metrics, health, queue] = await Promise.all([
+      // Calibrated qubit count (QPUs only; mocks are fully "calibrated").
+      const dqaPromise = isQpu
+        ? getJson<unknown>(
+            `/api/iqm/api/v1/calibration-sets/${machine.alias}/default/dynamic-quantum-architecture`,
+          ).catch(() => null)
+        : Promise.resolve<unknown>(null);
+
+      const [architecture, metrics, health, queue, dqa] = await Promise.all([
         getJson<StaticArchitecture[]>(
           `/api/iqm/api/v1/quantum-computers/${machine.alias}/artifacts/static-quantum-architectures`,
         ),
@@ -244,6 +270,7 @@ async function fetchMachines(withMetrics: boolean): Promise<Backend[]> {
           : Promise.resolve(undefined),
         healthPromise,
         queuePromise,
+        dqaPromise,
       ]);
 
       const status: BackendStatus = isQpu
@@ -260,6 +287,7 @@ async function fetchMachines(withMetrics: boolean): Promise<Backend[]> {
         status,
         queueDepth,
         availability,
+        calibratedQubitCount(dqa),
       );
     }),
   );
