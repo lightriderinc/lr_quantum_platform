@@ -12,7 +12,7 @@ export default function WelcomePage() {
         <div className="flex flex-col">
           <h1 className="hero font-semibold text-gray-700 mb-12">
             Welcome to <br /> Light Rider{" "}
-            <span className="color-brand-primary">Cloud</span>.
+            <span className="color-brand-primary">Quantum</span>.
           </h1>
           <div className="flex flex-col xl:flex-row xl:gap-8 xl:mb-2 mb-12">
             <div className="flex flex-col xl:justify-center w-full">
