@@ -11,17 +11,17 @@ import {
   type FilterCategory,
 } from "@/lib/backends/filters";
 import {
-  backendTab,
-  BACKEND_TABS,
-  countByTab,
-  isBackendTab,
-  type BackendTab,
-} from "@/lib/backends/tabs";
-import {
   sortBackends,
   type BackendSortKey,
   type SortDirection,
 } from "@/lib/backends/sort";
+import {
+  BACKEND_TABS,
+  backendTab,
+  countByTab,
+  isBackendTab,
+  type BackendTab,
+} from "@/lib/backends/tabs";
 import { isReservationCatalogId } from "@/lib/quantum/reservations";
 import type { Backend } from "@/types/backend";
 import { useEffect, useState } from "react";
@@ -33,7 +33,6 @@ import BackendList from "./BackendList";
 import BackendModal from "./BackendModal";
 import BackendRowSkeleton from "./BackendRowSkeleton";
 import BackendSortMenu from "./BackendSortMenu";
-import BackendsOverview from "./BackendsOverview";
 import type { FilterOption } from "./FilterSection";
 
 type View = "cards" | "list";
@@ -183,20 +182,19 @@ export default function BackendCatalog({
     setFilters(createEmptyFilters());
   }
 
-  const overview = (
-    <BackendsOverview
-      backends={allBackends}
-      isLoading={anyLoading}
-      isStatusLoading={iqmStatusLoading}
-    />
-  );
+  // const overview = (
+  //   <BackendsOverview
+  //     backends={allBackends}
+  //     isLoading={anyLoading}
+  //     isStatusLoading={iqmStatusLoading}
+  //   />
+  // );
 
   // Skeleton grid until every provider's cards are ready, so the catalog
   // appears in one piece instead of provider by provider.
   if (anyLoading) {
     return (
       <>
-        {overview}
         {view === "list" ? (
           <div className="overflow-x-auto default-radius border border-gray-100">
             <table className="w-full text-left text-sm">
@@ -220,12 +218,10 @@ export default function BackendCatalog({
 
   return (
     <>
-      {overview}
-
       <div
         role="tablist"
         aria-label="Backend type"
-        className="mb-6 flex gap-2 overflow-x-auto border-b border-gray-200"
+        className="mb-6 flex gap-2 overflow-x-auto border-b border-gray-100"
       >
         {BACKEND_TABS.map((t) => (
           <button
