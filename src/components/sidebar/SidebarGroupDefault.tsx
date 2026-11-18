@@ -24,19 +24,20 @@ export default function SidebarGroupDefault({
           tourId="sidebar-dashboard"
         />
         <SidebarNavItem
-          name="Jobs"
-          href="/jobs"
-          icon={MdBarChart}
-          onNavigate={onNavigate}
-          tourId="sidebar-jobs"
-        />
-        <SidebarNavItem
           name="Composer"
           href="/composer"
           icon={MdSchema}
           onNavigate={onNavigate}
           tourId="sidebar-composer"
         />
+        <SidebarNavItem
+          name="Jobs"
+          href="/jobs"
+          icon={MdBarChart}
+          onNavigate={onNavigate}
+          tourId="sidebar-jobs"
+        />
+
         {/* <SidebarNavItem
           name="Experiments"
           href="/experiments"

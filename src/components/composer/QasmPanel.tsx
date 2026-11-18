@@ -6,9 +6,9 @@ import DownloadButton from "@/components/ui/DownloadButton";
 // Read-only OpenQASM 3 for the current circuit, regenerated on every edit.
 export default function QasmPanel({ qasm }: { qasm: string }) {
   return (
-    <section className="flex min-w-0 flex-col default-radius border border-gray-100 bg-gray-50 p-4" aria-label="OpenQASM 3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-gray-900">OpenQASM 3</h2>
+    <section className="flex min-w-0 flex-col default-radius border border-gray-50 bg-gray-50 p-4" aria-label="OpenQASM 3">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <h2 className="block text-md font-semibold text-gray-400">OpenQASM 3</h2>
         <div className="flex items-center gap-2">
           <CopyButton value={qasm} label="Copy" />
           <DownloadButton value={qasm} filename="circuit.qasm" mimeType="text/plain" label="Download" />

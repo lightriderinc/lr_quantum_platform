@@ -34,9 +34,9 @@ export default function ProbabilityPanel({
   measuredMidCircuit: number[];
 }) {
   return (
-    <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Probabilities">
+    <section className="default-radius border border-gray-50 bg-gray-50 p-4" aria-label="Probabilities">
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
-        <h2 className="text-base font-semibold text-gray-900">Probabilities</h2>
+        <h2 className="block text-md font-semibold text-gray-400">Probabilities</h2>
         <span className="text-xs text-gray-500">Ideal simulation, no noise</span>
       </div>
       {preview ? (
@@ -66,7 +66,7 @@ function Chart({
 
   return (
     <>
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-8 text-xs text-gray-500">
         {preview.basis === "all"
           ? "No measurements yet. Showing every qubit."
           : "Outcomes of the measured bits, highest bit on the left."}

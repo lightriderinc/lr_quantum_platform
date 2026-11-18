@@ -1,5 +1,6 @@
 "use client";
 
+import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
 import {
   circuitStats,
   formatAngle,
@@ -8,8 +9,8 @@ import {
   gatesAfterMeasure,
   maxQubitsFor,
   MIN_QUBITS,
-  PREVIEW_MAX_QUBITS,
   parseAngle,
+  PREVIEW_MAX_QUBITS,
   runBlockers,
   toLrCircuit,
   toQasm3,
@@ -17,10 +18,9 @@ import {
   type GateName,
   type PlacedGate,
 } from "@/lib/composer/circuit";
-import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
-import type { QuantumCircuitPayload } from "@/lib/quantum/client";
 import { editorReducer, initialEditorState, newGateId, type CopiedGate } from "@/lib/composer/editor";
 import { outcomeProbabilities, qubitSummaries, simulate } from "@/lib/composer/statevector";
+import type { QuantumCircuitPayload } from "@/lib/quantum/client";
 import { useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import {
   MdAdd,
@@ -201,7 +201,7 @@ export default function Composer({
     // the run panel beside the rest from lg up.
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex min-w-0 flex-col gap-6">
-        <section className="@container min-w-0 default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Circuit editor">
+        <section className="@container min-w-0 default-radius border-2 border-gray-50 p-4" aria-label="Circuit editor">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5" role="toolbar" aria-label="Circuit tools">
               <button

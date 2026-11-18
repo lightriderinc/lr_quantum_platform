@@ -11,7 +11,7 @@ import { useIonqBackends } from "@/hooks/useIonqBackends";
 import { useIqmBackends } from "@/hooks/useIqmBackends";
 import { useJobSubmission } from "@/hooks/useJobSubmission";
 import { useRigettiBackends } from "@/hooks/useRigettiBackends";
-import { backendTab, BACKEND_TABS, countByTab, type BackendTab } from "@/lib/backends/tabs";
+import { BACKEND_TABS, backendTab, countByTab, type BackendTab } from "@/lib/backends/tabs";
 import type { LrCircuitPayload } from "@/lib/composer/circuit";
 import { getQuantumBackendId } from "@/lib/quantum/backends";
 import type { Backend } from "@/types/backend";
@@ -104,9 +104,9 @@ export default function RunPanel({
 
   return (
     <Panel>
-      <h2 className="mb-3 text-base font-semibold text-gray-900">Run</h2>
+      <h2 className="block text-md font-semibold text-gray-400 mb-4">Run</h2>
 
-      <div role="tablist" aria-label="Backend type" className="mb-3 flex gap-2 border-b border-gray-200">
+      <div role="tablist" aria-label="Backend type" className="mb-3 flex gap-2 border-b border-gray-100">
         {BACKEND_TABS.map((t) => (
           <button
             key={t.id}
@@ -219,7 +219,7 @@ export default function RunPanel({
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <section className="default-radius border border-gray-100 bg-gray-50 p-4" aria-label="Run">
+    <section className="default-radius border border-gray-50 bg-gray-50 p-4" aria-label="Run">
       {children}
     </section>
   );
