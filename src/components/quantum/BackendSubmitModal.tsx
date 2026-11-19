@@ -73,6 +73,7 @@ export default function BackendSubmitModal({
     circuit: selection.built.payload,
     shots,
     gate: selection.id,
+    templateName: circuitTemplate(selection.id).name,
   });
   const { blockedByCredits, stillCheckingCredits, submittedJob, displayedJob } = submission;
   // Live status, from the same catalog as the Backends page: an Offline or

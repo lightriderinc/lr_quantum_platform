@@ -65,14 +65,14 @@ export function formatQueueTime(ms: number): string {
   return minutes === 0 ? hrs : `${hrs} ${minutes} min`;
 }
 
-// Short label for a card/modal row: "Available now", "Available at 8:00 PM"
+// Short label for a card/modal row: "Available", "Available at 8:00 PM"
 // (later today), or "Available Fri, 8:00 PM" (another day). Returns null when
 // we can't say, so callers omit the row.
 export function formatAvailability(
   availability: BackendAvailability | undefined,
 ): string | null {
   if (!availability) return null;
-  if (availability.availableNow) return "Available now";
+  if (availability.availableNow) return "Available";
   if (!availability.nextWindowStart) return null;
 
   const start = new Date(availability.nextWindowStart);
@@ -146,7 +146,7 @@ export interface BackendCondition extends AvailabilitySummary {
 
 // The one state every surface shows for a backend (catalog card and row,
 // detail modal, composer run panel, submit popups), so a status light and an
-// availability line can never disagree ("Offline" next to "Available now").
+// availability line can never disagree ("Offline" next to "Available").
 // A provider-reported outage wins over any schedule; otherwise the schedule
 // (summarizeAvailability) decides; providers with no schedule fall back to
 // the status light alone. "Available Fri, 2:45 AM" (healthy, between
@@ -159,7 +159,7 @@ export function backendCondition(
   if (status === "maintenance") return { label: "Maintenance", tone: "unavailable", blocked: true };
   const summary = summarizeAvailability(backend);
   if (summary) return { ...summary, blocked: summary.label === "Unavailable" };
-  if (status === "online") return { label: "Available now", tone: "available", blocked: false };
+  if (status === "online") return { label: "Available", tone: "available", blocked: false };
   if (status === "paused") return { label: "Unavailable", tone: "unavailable", blocked: true };
   return { label: backend.statusInfo?.label ?? "Unknown", tone: "unknown", blocked: false };
 }

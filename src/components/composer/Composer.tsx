@@ -2,7 +2,7 @@
 
 import { useRunnableBackends } from "@/hooks/useRunnableBackends";
 import { backendCondition } from "@/lib/backends/availability";
-import { CIRCUIT_SECTIONS, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
+import { CIRCUIT_SECTIONS, GHZ_ALL_TEMPLATE_NAME, ghzPayload, templatesForQubits } from "@/lib/circuits/templates";
 import {
   circuitStats,
   formatAngle,
@@ -65,12 +65,18 @@ function isTyping(target: EventTarget | null): boolean {
 export default function Composer({
   isAuthenticated,
   initialCircuit,
+  initialTemplateName,
 }: {
   isAuthenticated: boolean;
   /** Circuit to start from instead of the Bell pair, e.g. a template opened from a submit popup. */
   initialCircuit?: Circuit;
+  /** The template initialCircuit was built from, if any. */
+  initialTemplateName?: string;
 }) {
-  const [state, dispatch] = useReducer(editorReducer, initialCircuit ?? STARTER, initialEditorState);
+  const [state, dispatch] = useReducer(editorReducer, initialCircuit ?? STARTER, (c) => ({
+    ...initialEditorState(c),
+    loaded: initialTemplateName ? { name: initialTemplateName, circuit: c } : null,
+  }));
   const circuit = state.present;
   const [tool, setTool] = useState<GateName | null>(null);
   const [angleText, setAngleText] = useState("pi/2");
@@ -373,6 +379,7 @@ export default function Composer({
       <div className="min-w-0 lg:sticky lg:top-6 lg:self-start">
         <RunPanel
           payload={payload}
+          templateName={loadedName}
           isAuthenticated={isAuthenticated}
           selectedId={backendId}
           onSelect={setBackendId}
@@ -466,7 +473,7 @@ function TemplatesMenu({
                     entry,
                     item(
                       "ghz-all",
-                      "GHZ (all qubits)",
+                      GHZ_ALL_TEMPLATE_NAME,
                       `All ${numQubits} ${numQubits === 1 ? "qubit" : "qubits"} entangled: all 0s or all 1s.`,
                       () => ghzPayload(numQubits),
                     ),

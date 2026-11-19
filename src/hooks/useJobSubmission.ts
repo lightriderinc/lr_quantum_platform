@@ -53,6 +53,7 @@ interface Vars {
   circuit: QuantumCircuitPayload;
   shots: number;
   confirmedPriceCredits?: number;
+  templateName?: string | null;
 }
 
 export interface JobSubmissionOptions {
@@ -61,9 +62,11 @@ export interface JobSubmissionOptions {
   shots: number;
   /** Stored on the job shown afterwards (JobResultView's `gate`), e.g. "bell" or "composer". */
   gate: string;
+  /** The template the circuit came from, unedited (stored with the job, shown in its details); null otherwise. */
+  templateName?: string | null;
 }
 
-export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissionOptions) {
+export function useJobSubmission({ backend, circuit, shots, gate, templateName }: JobSubmissionOptions) {
   const queryClient = useQueryClient();
   const key = JSON.stringify([backend, circuit, shots]);
   const needsCredits = isPaidBackend(backend);
@@ -99,7 +102,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
   const submitMutation = useMutation({
     mutationFn: async (vars: Vars) => {
       const submitTime = new Date().toISOString();
-      const job = await submitQuantumJob(vars.backend, vars.circuit, vars.shots, vars.confirmedPriceCredits);
+      const job = await submitQuantumJob(vars.backend, vars.circuit, vars.shots, vars.confirmedPriceCredits, vars.templateName);
       return { job, submitTime };
     },
     onError: (err, vars) => {
@@ -202,7 +205,7 @@ export function useJobSubmission({ backend, circuit, shots, gate }: JobSubmissio
   function submit() {
     setCheckedShots(shots);
     if (invalidJob) return;
-    const vars: Vars = { key, backend, circuit, shots };
+    const vars: Vars = { key, backend, circuit, shots, templateName };
     if (pricedPerJob && !quote) {
       quoteMutation.mutate(vars);
       return;

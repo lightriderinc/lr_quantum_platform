@@ -27,6 +27,7 @@ import { MdArrowLeft } from "react-icons/md";
 // clears the choice if the picked one goes unavailable.
 export default function RunPanel({
   payload,
+  templateName,
   isAuthenticated,
   blockers,
   onMeasureAll,
@@ -34,6 +35,8 @@ export default function RunPanel({
   onSelect,
 }: {
   payload: LrCircuitPayload;
+  /** The template the circuit still matches unedited, stored with the job; null otherwise. */
+  templateName: string | null;
   /** The chosen backend's catalog id, or null (nothing chosen yet). Owned by the composer, which limits qubits by it. */
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -52,7 +55,7 @@ export default function RunPanel({
   // The hook needs some backend id; with nothing chosen it gets the free
   // ionq:mock as a placeholder, and the form below can't submit anyway.
   const quantumId = (selectedId && getQuantumBackendId(selectedId)) || "ionq-simulator";
-  const submission = useJobSubmission({ backend: quantumId, circuit: payload, shots, gate: "composer" });
+  const submission = useJobSubmission({ backend: quantumId, circuit: payload, shots, gate: "composer", templateName });
   const reasons = selected ? blockers(selected) : [];
   const needsMeasure = payload.instructions.length > 0 && !payload.instructions.some((i) => i.name === "measure");
 

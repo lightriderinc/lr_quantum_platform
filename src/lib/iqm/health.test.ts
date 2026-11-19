@@ -50,14 +50,14 @@ describe("IQM QPU status matches IQM Resonance", () => {
     const c = card(health(true), queue(0));
     expect(c.status).toBe("online");
     expect(c.queueDepth).toBe(0);
-    expect(backendCondition(c)).toEqual({ label: "Available now", tone: "available", blocked: false });
+    expect(backendCondition(c)).toEqual({ label: "Available", tone: "available", blocked: false });
   });
 
   test("busy: healthy with jobs waiting is still available, with its queue", () => {
     const c = card(health(true), queue(7));
     expect(c.status).toBe("online");
     expect(c.queueDepth).toBe(7);
-    expect(backendCondition(c).label).toBe("Available now");
+    expect(backendCondition(c).label).toBe("Available");
   });
 
   test("offline: unhealthy, or operational_status offline, reads Offline even inside a window", () => {
@@ -90,7 +90,7 @@ describe("status and availability never disagree", () => {
   });
 
   test("no schedule: the status light alone", () => {
-    expect(backendCondition({ status: "online" }).label).toBe("Available now");
+    expect(backendCondition({ status: "online" }).label).toBe("Available");
     expect(backendCondition({ status: "offline" }).blocked).toBe(true);
     expect(backendCondition({ status: "unknown", statusInfo: { label: "Checking", reason: "" } })).toEqual({
       label: "Checking",

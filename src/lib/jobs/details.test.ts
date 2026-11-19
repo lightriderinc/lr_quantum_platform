@@ -22,9 +22,12 @@ describe("job details", () => {
     }
   });
 
-  test("the circuit that ran: OpenQASM 3, with the template name for a preset job", () => {
-    const bell = jobCircuit(circuitTemplate("bell").build().payload);
+  test("the circuit that ran: OpenQASM 3, with the stored template name for a template job", () => {
+    const payload = circuitTemplate("bell").build().payload;
+    const bell = jobCircuit({ ...payload, lr_template: "Bell pair" });
     expect(bell?.presetName).toBe("Bell pair");
+    // No stored name (edited in the composer, an API job, or from before names were stored): just "Circuit".
+    expect(jobCircuit(payload)?.presetName).toBeNull();
     expect(bell?.qasm).toBe(
       'OPENQASM 3.0;\ninclude "stdgates.inc";\n\nqubit[2] q;\nbit[2] c;\n\nh q[0];\ncx q[0], q[1];\nc[0] = measure q[0];\nc[1] = measure q[1];\n',
     );

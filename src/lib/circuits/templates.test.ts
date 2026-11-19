@@ -8,6 +8,7 @@ import {
   composerHref,
   haarAngles,
   probabilityOfOne,
+  isTemplateName,
   templateFromQuery,
   templatesForQubits,
   type CircuitTemplateId,
@@ -133,5 +134,13 @@ describe("circuit templates", () => {
   test("circuits wider than the backend are hidden", () => {
     expect(templatesForQubits(2).map((t) => t.id)).toEqual(["h", "bell", "haar-1", "haar-2", "grover-2"]);
     expect(templatesForQubits(20)).toHaveLength(CIRCUIT_TEMPLATES.length);
+  });
+});
+
+describe("template names stored with jobs", () => {
+  test("only names the popup and composer show", () => {
+    for (const t of CIRCUIT_TEMPLATES) expect(isTemplateName(t.name)).toBe(true);
+    expect(isTemplateName("GHZ (all qubits)")).toBe(true);
+    for (const v of ["bell", "My circuit", "", null, 3]) expect(isTemplateName(v)).toBe(false);
   });
 });

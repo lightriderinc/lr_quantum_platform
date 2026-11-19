@@ -221,17 +221,17 @@ export function circuitTemplate(id: CircuitTemplateId): CircuitTemplate {
   return BY_ID.get(id)!;
 }
 
+/** The composer-only template: GHZ across the circuit's current qubit count. */
+export const GHZ_ALL_TEMPLATE_NAME = "GHZ (all qubits)";
+
 /**
- * The template a submitted circuit came from, by its payload `name` (e.g.
- * "bell" -> "Bell pair"), for job details. Null for anything else, such as
- * "composer" or an API user's own name. "ghz" covers both GHZ entries.
+ * A template's display name, as the submit popup and the composer show it.
+ * The submit route stores one with a job only if it passes this check, so
+ * job details never show a made-up template name.
  */
-export function templateNameFor(payloadName: string | undefined): string | null {
-  if (!payloadName) return null;
-  PAYLOAD_NAMES ??= new Map(CIRCUIT_TEMPLATES.map((t) => [t.build().payload.name ?? "", t.name]));
-  return PAYLOAD_NAMES.get(payloadName) ?? null;
+export function isTemplateName(name: unknown): name is string {
+  return typeof name === "string" && (name === GHZ_ALL_TEMPLATE_NAME || CIRCUIT_TEMPLATES.some((t) => t.name === name));
 }
-let PAYLOAD_NAMES: Map<string, string> | undefined;
 
 export function isCircuitTemplateId(value: string | undefined): value is CircuitTemplateId {
   return value !== undefined && BY_ID.has(value as CircuitTemplateId);

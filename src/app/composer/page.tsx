@@ -30,7 +30,7 @@ export default async function ComposerPage({
         Build a circuit, preview its outcomes, and run it on a simulator or a QPU.
       </p>
 
-      <Composer isAuthenticated={isAuthenticated} initialCircuit={initialCircuit} />
+      <Composer isAuthenticated={isAuthenticated} initialCircuit={initialCircuit} initialTemplateName={fromLink?.template.name} />
     </div>
   );
 }

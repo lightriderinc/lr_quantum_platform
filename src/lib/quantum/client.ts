@@ -117,15 +117,19 @@ export async function submitQuantumJob(
   shots: number,
   /** Required for per-job priced backends (IonQ Forte): the price the user confirmed. The server charges its own re-quote, never more than this. */
   confirmedPriceCredits?: number,
+  /** The template the circuit came from, unedited; stored with the job for its details. */
+  templateName?: string | null,
 ): Promise<QuantumJobHandle> {
   const res = await fetch("/api/lr/quantum/submit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(
-      confirmedPriceCredits === undefined
-        ? { backend, circuit, shots }
-        : { backend, circuit, shots, confirmedPriceCredits },
-    ),
+    body: JSON.stringify({
+      backend,
+      circuit,
+      shots,
+      ...(confirmedPriceCredits === undefined ? {} : { confirmedPriceCredits }),
+      ...(templateName ? { templateName } : {}),
+    }),
   });
   if (res.status === 409) {
     const data = await res.json().catch(() => ({}));

@@ -14,6 +14,8 @@ import {
   shotsLimitError,
   type QuantumBackendId,
 } from "@/lib/quantum/backends";
+import { isTemplateName } from "@/lib/circuits/templates";
+import { STORED_TEMPLATE_KEY } from "@/lib/jobs/details";
 import type { Customer, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
@@ -56,7 +58,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { backend, circuit, shots, confirmedPriceCredits } = body;
+  const { backend, circuit, shots, confirmedPriceCredits, templateName } = body;
+  // What the job row keeps for its details: the circuit, and the template it came from (if any).
+  const jobCircuit = storedCircuit(circuit, templateName);
 
   if (!backend || !isValidBackend(backend)) {
     return NextResponse.json(
@@ -75,7 +79,7 @@ export async function POST(req: Request) {
 
   if (isPricedPerJob(backend)) {
     const deviceInstance = QUANTUM_BACKENDS[backend].deviceInstance;
-    return submitWithConfirmedPrice(customer, backend, circuit, shots ?? 1, confirmedPriceCredits, submitStartedAt, {
+    return submitWithConfirmedPrice(customer, backend, circuit, jobCircuit, shots ?? 1, confirmedPriceCredits, submitStartedAt, {
       canSubmit: () => canUseIonqQpu(customer.id),
       quote: async () => (await quoteIonqJob(deviceInstance, circuit, shots ?? 1)).priceCredits,
     });
@@ -87,7 +91,7 @@ export async function POST(req: Request) {
   if (backend === IONQ_NOISY_SIM_BACKEND) {
     const priceCredits = noisySimPriceCredits(shots ?? 1);
     if (priceCredits > 0) {
-      return submitWithConfirmedPrice(customer, backend, circuit, shots ?? 1, confirmedPriceCredits, submitStartedAt, {
+      return submitWithConfirmedPrice(customer, backend, circuit, jobCircuit, shots ?? 1, confirmedPriceCredits, submitStartedAt, {
         canSubmit: async () => true,
         quote: async () => priceCredits,
       });
@@ -179,7 +183,7 @@ export async function POST(req: Request) {
           status: typeof data.status === "string" ? data.status : "PENDING",
           costCents,
           createdAt: submitStartedAt,
-          circuit: storedCircuit(circuit),
+          circuit: jobCircuit,
         },
       }),
     );
@@ -250,6 +254,7 @@ async function submitWithConfirmedPrice(
   customer: Customer,
   backend: QuantumBackendId,
   circuit: unknown,
+  jobCircuit: Prisma.InputJsonValue | undefined,
   shots: number,
   confirmedPriceCredits: unknown,
   submitStartedAt: Date,
@@ -342,7 +347,7 @@ async function submitWithConfirmedPrice(
         status: typeof data.status === "string" ? data.status : "PENDING",
         costCents: priceCredits,
         createdAt: submitStartedAt,
-        circuit: storedCircuit(circuit),
+        circuit: jobCircuit,
       },
     });
   } else {
@@ -390,9 +395,19 @@ function priceConfirmationRefusal(priceCredits: number, confirmedPriceCredits: u
   return null;
 }
 
-/** The submitted circuit, kept with the job for its details (shown as OpenQASM 3). Only a JSON object is stored. */
-function storedCircuit(circuit: unknown): Prisma.InputJsonValue | undefined {
-  return circuit && typeof circuit === "object" && !Array.isArray(circuit) ? (circuit as Prisma.InputJsonValue) : undefined;
+/**
+ * The submitted circuit, kept with the job for its details (shown as
+ * OpenQASM 3). Only a JSON object is stored. A job run from a template,
+ * unedited, also keeps the template's name under STORED_TEMPLATE_KEY, but
+ * only a real template name (isTemplateName); any such key sent inside the
+ * circuit itself is dropped. qpu-proxy gets the circuit as sent, without it.
+ */
+function storedCircuit(circuit: unknown, templateName: unknown): Prisma.InputJsonValue | undefined {
+  if (!circuit || typeof circuit !== "object" || Array.isArray(circuit)) return undefined;
+  const stored: Record<string, unknown> = { ...circuit };
+  delete stored[STORED_TEMPLATE_KEY];
+  if (isTemplateName(templateName)) stored[STORED_TEMPLATE_KEY] = templateName;
+  return stored as Prisma.InputJsonValue;
 }
 
 /**

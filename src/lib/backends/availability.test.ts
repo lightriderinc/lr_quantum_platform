@@ -28,9 +28,9 @@ describe("summarizeAvailability", () => {
     expect(summarizeAvailability({ status: "online" })).toBeNull();
   });
 
-  test("an open window on a healthy machine reads Available now", () => {
+  test("an open window on a healthy machine reads Available", () => {
     expect(summarizeAvailability({ status: "online", availability: open })).toEqual({
-      label: "Available now",
+      label: "Available",
       tone: "available",
     });
   });
@@ -53,7 +53,7 @@ describe("summarizeAvailability", () => {
 
   test("an unconfirmed status keeps the schedule, and reads Unknown without one", () => {
     expect(summarizeAvailability({ status: "unknown", availability: open })?.label).toBe(
-      "Available now",
+      "Available",
     );
     expect(summarizeAvailability({ status: "unknown", availability: noUpcomingWindow })).toEqual({
       label: "Unknown",

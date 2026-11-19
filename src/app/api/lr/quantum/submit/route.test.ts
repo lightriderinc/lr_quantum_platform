@@ -64,6 +64,7 @@ let estimateUsd: number | null = 1; // -> 130 credits at the default 1.3 markup
 let submitStatus = 200;
 let submitDetail: unknown = "IonQ backend 'qpu.forte-1' is currently 'unavailable'";
 let proxyDown = false; // the connection to qpu-proxy itself fails
+let sentCircuits: unknown[] = []; // circuits as qpu-proxy received them
 
 beforeEach(() => {
   state.balance = 10_000;
@@ -75,6 +76,7 @@ beforeEach(() => {
   submitStatus = 200;
   submitDetail = "IonQ backend 'qpu.forte-1' is currently 'unavailable'";
   proxyDown = false;
+  sentCircuits = [];
   vi.stubEnv("QUANTUM_PROXY_URL", PROXY);
   vi.stubEnv("QUANTUM_PROXY_SERVICE_KEY", "lr_test");
   vi.stubEnv("IONQ_PRICE_MARKUP", "");
@@ -95,6 +97,7 @@ beforeEach(() => {
       if (path === "/jobs") {
         const body = JSON.parse(init?.body as string);
         state.calls.push(`device ${body.device_instance}`);
+        sentCircuits.push(body.circuit);
         if (proxyDown) throw new TypeError("fetch failed");
         if (submitStatus !== 200) return Response.json({ detail: submitDetail }, { status: submitStatus });
         return Response.json({ job_uuid: "job-123", status: "PENDING" });
@@ -119,6 +122,27 @@ describe("IonQ simulator (ionq:mock)", () => {
     expect(state.calls).toEqual(["fetch /jobs", "device ionq:mock"]);
     expect(state.ledger).toEqual([]);
     expect(state.jobs[0]).toMatchObject({ backend: "ionq-simulator", costCents: 0, circuit: CIRCUIT });
+  });
+});
+
+describe("template name stored with the job (job details: \"Circuit: {name}\")", () => {
+  test("a real template name is kept on the job's circuit; qpu-proxy gets the circuit as sent", async () => {
+    await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 10, templateName: "Bell pair" });
+    expect(state.jobs[0].circuit).toEqual({ ...CIRCUIT, lr_template: "Bell pair" });
+    expect(sentCircuits[0]).toEqual(CIRCUIT);
+  });
+
+  test("the composer-only GHZ, and the per-job (Forte) path, too", async () => {
+    await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 10, templateName: "GHZ (all qubits)" });
+    await submit({ backend: "ionq-forte-1", circuit: CIRCUIT, shots: 100, confirmedPriceCredits: 130, templateName: "Superposition" });
+    expect(state.jobs.map((j) => (j.circuit as { lr_template?: string }).lr_template)).toEqual(["GHZ (all qubits)", "Superposition"]);
+  });
+
+  test("no template, an unknown name, or one smuggled inside the circuit: plain circuit", async () => {
+    await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 10 });
+    await submit({ backend: "ionq-simulator", circuit: CIRCUIT, shots: 10, templateName: "My circuit" });
+    await submit({ backend: "ionq-simulator", circuit: { ...CIRCUIT, lr_template: "Bell pair" }, shots: 10 });
+    for (const j of state.jobs) expect(j.circuit).toEqual(CIRCUIT);
   });
 });
 

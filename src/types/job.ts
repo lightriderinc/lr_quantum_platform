@@ -33,8 +33,8 @@ export interface JobDetail {
   };
   /** Why the job failed, from qpu-proxy's GET /jobs/{uuid} (e.g. IonQ's own failure message). Only on failed jobs. */
   error?: string;
-  /** The lr-circuit/v1 payload as submitted (our job row); null for jobs from before it was stored. */
-  circuit?: { name?: string; num_qubits: number; num_clbits?: number; instructions: { name: string; qubits: number[]; clbits?: number[]; params?: number[] }[] } | null;
+  /** The lr-circuit/v1 payload as submitted (our job row), plus lr_template for an unedited template; null for jobs from before it was stored. */
+  circuit?: { name?: string; lr_template?: string; num_qubits: number; num_clbits?: number; instructions: { name: string; qubits: number[]; clbits?: number[]; params?: number[] }[] } | null;
   /** Credits charged for this job (our job row's costCents); 0 on free simulators. */
   creditsCharged?: number;
 }
