@@ -162,6 +162,14 @@ export async function fetchQuantumJobDetail(jobId: string): Promise<JobDetail> {
   return res.json();
 }
 
+/** Cancels a job that hasn't run yet (IonQ only; see canCancelOn). Resolves to the job's new status. */
+export async function cancelQuantumJob(jobId: string): Promise<JobStatus> {
+  const res = await fetch(`/api/lr/quantum/jobs/${jobId}/cancel`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const data: { status?: JobStatus } = await res.json();
+  return data.status ?? "CANCELLED";
+}
+
 export async function fetchQuantumJobResult(jobId: string): Promise<MeasurementCounts | null> {
   const res = await fetch(`/api/lr/quantum/jobs/${jobId}/result`);
   if (res.status === 409) return null;

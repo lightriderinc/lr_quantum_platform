@@ -10,7 +10,7 @@ export const ENTROPY_REFUND_PREFIX = "entropy:refund:";
 export const QUANTUM_JOB_PREFIX = "quantum_job:";
 /**
  * Refund of a per-job (IonQ Forte) charge whose job qpu-proxy then refused or
- * never received: "quantum_job_refund:<backend>". Like an entropy refund it
+ * never received, or that the user cancelled before it ran: "quantum_job_refund:<backend>". Like an entropy refund it
  * only returns credits already spent, so it must never count as a purchase
  * or unlock real hardware.
  */

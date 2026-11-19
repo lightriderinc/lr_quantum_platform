@@ -76,5 +76,13 @@ export async function GET(
   // of) iqm-proxy's own data.createdAt — callers that need to agree with
   // /jobs' list view (which reads the same persisted value) should prefer
   // this over data.createdAt; see BackendSubmitModal.tsx.
-  return NextResponse.json({ ...data, persistedCreatedAt: submission.createdAt });
+  // circuit and creditsCharged come from our own row: qpu-proxy doesn't keep
+  // the submitted payload, and only we know what was charged.
+  return NextResponse.json({
+    ...data,
+    persistedCreatedAt: submission.createdAt,
+    circuit: submission.circuit ?? null,
+    // A cancelled job whose charge was returned cost nothing.
+    creditsCharged: submission.refundedAt ? 0 : submission.costCents,
+  });
 }

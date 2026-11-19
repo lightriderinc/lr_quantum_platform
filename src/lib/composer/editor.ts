@@ -19,6 +19,12 @@ export const HISTORY_LIMIT = 100;
 export interface EditorState {
   past: Circuit[];
   present: Circuit;
+  /**
+   * The template last loaded and the exact circuit it produced. The Templates
+   * button shows its name while `present` is still that circuit (any edit or
+   * clear makes a new one; undo back to it shows the name again).
+   */
+  loaded?: { name: string; circuit: Circuit } | null;
   future: Circuit[];
 }
 
@@ -33,8 +39,10 @@ export type EditorAction =
   | { type: "removeQubit" }
   | { type: "measureAll" }
   /** Replace the circuit with a ready-made one (the Templates menu; see lib/circuits/templates.ts), as one undo step. Built by the caller, so random angles stay out of the reducer. */
-  | { type: "template"; circuit: Circuit }
+  | { type: "template"; circuit: Circuit; name?: string }
   | { type: "clear" }
+  /** Start over from a saved circuit (composer autosave), with no undo history. */
+  | { type: "restore"; circuit: Circuit; templateName?: string | null }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -172,17 +180,24 @@ export function applyEdit(circuit: Circuit, action: EditorAction): Circuit {
 }
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  if (action.type === "restore") {
+    return {
+      ...initialEditorState(action.circuit),
+      loaded: action.templateName ? { name: action.templateName, circuit: action.circuit } : null,
+    };
+  }
   if (action.type === "undo") {
     if (state.past.length === 0) return state;
     const previous = state.past[state.past.length - 1];
-    return { past: state.past.slice(0, -1), present: previous, future: [state.present, ...state.future] };
+    return { ...state, past: state.past.slice(0, -1), present: previous, future: [state.present, ...state.future] };
   }
   if (action.type === "redo") {
     if (state.future.length === 0) return state;
     const [next, ...rest] = state.future;
-    return { past: [...state.past, state.present], present: next, future: rest };
+    return { ...state, past: [...state.past, state.present], present: next, future: rest };
   }
   const next = applyEdit(state.present, action);
   if (next === state.present) return state;
-  return { past: [...state.past, state.present].slice(-HISTORY_LIMIT), present: next, future: [] };
+  const loaded = action.type === "template" && action.name ? { name: action.name, circuit: next } : state.loaded;
+  return { past: [...state.past, state.present].slice(-HISTORY_LIMIT), present: next, future: [], loaded };
 }

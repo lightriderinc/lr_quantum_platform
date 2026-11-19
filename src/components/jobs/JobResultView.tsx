@@ -6,12 +6,12 @@ import JobModeTag from "@/components/jobs/JobModeTag";
 import JobStatusBadge from "@/components/jobs/JobStatusBadge";
 import { formatDuration } from "@/lib/formatDuration";
 import { RESULT_TOP_OUTCOMES, shortenBitstring, visibleOutcomes } from "@/lib/jobs/outcomes";
-import { fetchQuantumJobDetail, fetchQuantumJobResult } from "@/lib/quantum/client";
-import type { Job } from "@/types/job";
-import { useQuery } from "@tanstack/react-query";
+import { formatCreditsCharged, jobCircuit, showCancel } from "@/lib/jobs/details";
+import { cancelQuantumJob, fetchQuantumJobDetail, fetchQuantumJobResult } from "@/lib/quantum/client";
+import { TERMINAL_JOB_STATUSES as TERMINAL, type Job, type JobDetail } from "@/types/job";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-const TERMINAL = new Set(["COMPLETED", "FAILED", "ABORTED"]);
 
 interface Props {
   job: Job;
@@ -44,6 +44,20 @@ export default function JobResultView({ job, footer }: Props) {
   });
 
   const currentStatus = detail?.status ?? job.status;
+  const circuit = jobCircuit(detail?.circuit);
+
+  const queryClient = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: () => cancelQuantumJob(job.uuid),
+    onSuccess: (status) => {
+      // Show the new status now; the next fetch confirms it from qpu-proxy.
+      queryClient.setQueryData<JobDetail>(["lr-job-detail", job.uuid], (old) => (old ? { ...old, status } : old));
+      queryClient.invalidateQueries({ queryKey: ["lr-job-detail", job.uuid] });
+      queryClient.invalidateQueries({ queryKey: ["lr-jobs-list"] });
+      // A paid job's credits come back on cancel.
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+    },
+  });
 
   const createdAt = detail?.createdAt ?? job.created_at;
   const finishedAt = detail?.finishedAt ?? job.finished_at;
@@ -101,6 +115,7 @@ export default function JobResultView({ job, footer }: Props) {
           label="Number of shots"
           value={job.shots !== undefined ? job.shots.toLocaleString() : "—"}
         />
+        <Field label="Credits" value={<span data-job-credits>{formatCreditsCharged(detail?.creditsCharged) ?? "—"}</span>} />
       </div>
 
       {currentStatus === "COMPLETED" && isCountsLoading && (
@@ -198,13 +213,41 @@ export default function JobResultView({ job, footer }: Props) {
         currentStatus === "PROCESSING") && (
         <div className="default-radius border border-dashed border-gray-100 p-5 text-center text-sm text-gray-500">
           Waiting for results…
+          {showCancel(job.backend, currentStatus) && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => cancel.mutate()}
+                disabled={cancel.isPending}
+                className="cursor-pointer text-sm font-medium text-red-600 hover:underline disabled:cursor-wait disabled:opacity-50"
+                data-job-cancel
+              >
+                {cancel.isPending ? "Cancelling…" : "Cancel job"}
+              </button>
+              {cancel.error && <p className="mt-1 text-xs text-red-500">{cancel.error.message}</p>}
+            </div>
+          )}
         </div>
       )}
 
-      {(currentStatus === "FAILED" || currentStatus === "ABORTED") && (
+      {(currentStatus === "FAILED" || currentStatus === "ABORTED" || currentStatus === "CANCELLED") && (
         <div className="default-radius border border-dashed border-red-200 p-5 text-center text-sm text-red-500">
           <p>Job {currentStatus.toLowerCase()}.</p>
           {detail?.error && <p className="mt-1 break-words text-xs text-red-400" data-job-error>{detail.error}</p>}
+        </div>
+      )}
+
+      {circuit && (
+        <div data-job-circuit>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-gray-500">
+              Circuit{circuit.presetName ? `: ${circuit.presetName}` : ""}
+            </p>
+            <CopyButton value={circuit.qasm} label="Copy" />
+          </div>
+          <pre className="max-h-64 default-radius overflow-auto border border-gray-100 bg-gray-50 p-3 font-mono text-xs text-gray-700">
+            {circuit.qasm}
+          </pre>
         </div>
       )}
 

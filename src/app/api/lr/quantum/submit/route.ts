@@ -14,7 +14,7 @@ import {
   shotsLimitError,
   type QuantumBackendId,
 } from "@/lib/quantum/backends";
-import type { Customer } from "@prisma/client";
+import type { Customer, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 const PURCHASE_REQUIRED = {
@@ -179,6 +179,7 @@ export async function POST(req: Request) {
           status: typeof data.status === "string" ? data.status : "PENDING",
           costCents,
           createdAt: submitStartedAt,
+          circuit: storedCircuit(circuit),
         },
       }),
     );
@@ -341,6 +342,7 @@ async function submitWithConfirmedPrice(
         status: typeof data.status === "string" ? data.status : "PENDING",
         costCents: priceCredits,
         createdAt: submitStartedAt,
+        circuit: storedCircuit(circuit),
       },
     });
   } else {
@@ -386,6 +388,11 @@ function priceConfirmationRefusal(priceCredits: number, confirmedPriceCredits: u
     );
   }
   return null;
+}
+
+/** The submitted circuit, kept with the job for its details (shown as OpenQASM 3). Only a JSON object is stored. */
+function storedCircuit(circuit: unknown): Prisma.InputJsonValue | undefined {
+  return circuit && typeof circuit === "object" && !Array.isArray(circuit) ? (circuit as Prisma.InputJsonValue) : undefined;
 }
 
 /**

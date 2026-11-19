@@ -118,7 +118,7 @@ describe("IonQ simulator (ionq:mock)", () => {
     expect(r.status).toBe(200);
     expect(state.calls).toEqual(["fetch /jobs", "device ionq:mock"]);
     expect(state.ledger).toEqual([]);
-    expect(state.jobs[0]).toMatchObject({ backend: "ionq-simulator", costCents: 0 });
+    expect(state.jobs[0]).toMatchObject({ backend: "ionq-simulator", costCents: 0, circuit: CIRCUIT });
   });
 });
 
@@ -212,7 +212,7 @@ describe("IonQ Forte: priced per job, charged before the job is sent", () => {
     expect(state.calls).toEqual(["fetch /jobs/estimate", "debit", "fetch /jobs", "device forte-1"]);
     expect(state.balance).toBe(10_000 - 130);
     expect(state.ledger).toEqual([{ amountCents: -130, reason: "quantum_job:ionq-forte-1" }]);
-    expect(state.jobs[0]).toMatchObject({ jobId: "job-123", backend: "ionq-forte-1", costCents: 130, shots: 100 });
+    expect(state.jobs[0]).toMatchObject({ jobId: "job-123", backend: "ionq-forte-1", costCents: 130, shots: 100, circuit: CIRCUIT });
   });
 
   test("qpu-proxy refuses (Forte went into maintenance): refunded at once, 503 says so", async () => {
@@ -241,7 +241,7 @@ describe("per-shot paid QPUs (IQM, Rigetti): one click, no price confirmation", 
     expect(state.calls).toEqual(["fetch /jobs", `device ${device}`, "decrement"]);
     expect(state.balance).toBe(10_000 - 200);
     expect(state.ledger).toEqual([{ amountCents: -200, reason: `quantum_job:${backend}` }]);
-    expect(state.jobs[0]).toMatchObject({ backend, costCents: 200, shots: 1000 });
+    expect(state.jobs[0]).toMatchObject({ backend, costCents: 200, shots: 1000, circuit: CIRCUIT });
   });
 
   test("a confirmedPriceCredits sent anyway is ignored: no 409, charged the server's price", async () => {

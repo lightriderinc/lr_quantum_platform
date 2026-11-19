@@ -20,6 +20,7 @@ import {
   type GateName,
   type PlacedGate,
 } from "@/lib/composer/circuit";
+import { browserStorage, loadAutosave, saveAutosave } from "@/lib/composer/autosave";
 import { editorReducer, initialEditorState, newGateId, type CopiedGate } from "@/lib/composer/editor";
 import { outcomeProbabilities, qubitSummaries, simulate } from "@/lib/composer/statevector";
 import type { QuantumCircuitPayload } from "@/lib/quantum/client";
@@ -51,6 +52,8 @@ const STARTER: Circuit = {
   ],
 };
 
+const AUTOSAVE_DELAY_MS = 500;
+
 const toolButton =
   "inline-flex h-8 shrink-0 items-center gap-1 default-radius border border-gray-200 bg-white px-2 text-sm text-gray-700 transition-colors hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer";
 const iconButton = `${toolButton} w-8 justify-center px-0`;
@@ -76,7 +79,21 @@ export default function Composer({
   // The template last loaded, and the exact circuit it produced: the
   // Templates button shows its name until the circuit changes (any edit or
   // clear makes a new circuit object).
-  const [loadedTemplate, setLoadedTemplate] = useState<{ name: string; circuit: Circuit } | null>(null);
+  const loadedName = state.loaded?.circuit === circuit ? state.loaded.name : null;
+
+  // Autosave (lib/composer/autosave.ts): restore once on load, unless a
+  // ?template= link chose the circuit; then save every change, debounced.
+  // Restoring after mount keeps the server render and hydration identical.
+  useEffect(() => {
+    if (initialCircuit) return;
+    const saved = loadAutosave(browserStorage(), maxQubitsFor(null));
+    if (!saved) return;
+    dispatch({ type: "restore", circuit: saved.circuit, templateName: saved.templateName });
+  }, [initialCircuit]);
+  useEffect(() => {
+    const t = setTimeout(() => saveAutosave(browserStorage(), circuit, loadedName), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [circuit, loadedName]);
   // Backend chosen in the run panel: its qubit count is the editor's limit.
   const [backendId, setBackendId] = useState<string | null>(null);
   const { runnable } = useRunnableBackends();
@@ -271,12 +288,11 @@ export default function Composer({
               <TemplatesMenu
                 maxQubits={maxQubits}
                 numQubits={circuit.numQubits}
-                loadedName={loadedTemplate?.circuit === circuit ? loadedTemplate.name : null}
+                loadedName={loadedName}
                 onLoad={(templatePayload, name) => {
                   // Built by the menu, not the reducer: Haar templates draw new angles on each load.
                   const loaded = fromLrCircuit(templatePayload, newGateId);
-                  dispatch({ type: "template", circuit: loaded });
-                  setLoadedTemplate({ name, circuit: loaded });
+                  dispatch({ type: "template", circuit: loaded, name });
                   setSelectedId(null);
                   setPending(null);
                 }}

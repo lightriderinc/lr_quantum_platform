@@ -170,15 +170,27 @@ export function formatAngle(radians: number): string {
 
 /** Read-only OpenQASM 3 for the circuit, using the standard gate library. */
 export function toQasm3(circuit: Circuit): string {
-  const payload = toLrCircuit(circuit);
+  return payloadToQasm3(toLrCircuit(circuit));
+}
+
+/**
+ * OpenQASM 3 for any lr-circuit/v1 payload: the composer's, a template's, or
+ * one sent through the API (job details show the circuit that ran). Gate
+ * names are written as given.
+ */
+export function payloadToQasm3(payload: {
+  num_qubits: number;
+  num_clbits?: number;
+  instructions: { name: string; qubits: number[]; clbits?: number[]; params?: number[] }[];
+}): string {
   const hasMeasure = payload.instructions.some((i) => i.name === "measure");
   const q = (i: number) => `q[${i}]`;
   const lines = ["OPENQASM 3.0;", 'include "stdgates.inc";', "", `qubit[${payload.num_qubits}] q;`];
-  if (hasMeasure) lines.push(`bit[${payload.num_clbits}] c;`);
+  if (hasMeasure) lines.push(`bit[${payload.num_clbits ?? payload.num_qubits}] c;`);
   if (payload.instructions.length > 0) lines.push("");
   for (const inst of payload.instructions) {
     if (inst.name === "measure") {
-      lines.push(`c[${inst.clbits![0]}] = measure ${q(inst.qubits[0])};`);
+      lines.push(`c[${inst.clbits?.[0] ?? inst.qubits[0]}] = measure ${q(inst.qubits[0])};`);
     } else if (inst.name === "barrier") {
       lines.push(`barrier ${inst.qubits.map(q).join(", ")};`);
     } else {

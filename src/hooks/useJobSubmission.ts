@@ -20,7 +20,7 @@ import {
   type JobPriceQuote,
   type QuantumCircuitPayload,
 } from "@/lib/quantum/client";
-import type { Job } from "@/types/job";
+import { TERMINAL_JOB_STATUSES as TERMINAL, type Job } from "@/types/job";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
@@ -44,7 +44,6 @@ import { useEffect, useRef, useState } from "react";
 // that key and only used while the key still matches, so any edit drops it
 // without an effect or an explicit reset.
 
-const TERMINAL = new Set(["COMPLETED", "FAILED", "ABORTED"]);
 /** Detail fetches after COMPLETED while the finish time is still missing (3 s apart, so about a minute). */
 const FINISH_TIME_POLLS = 20;
 

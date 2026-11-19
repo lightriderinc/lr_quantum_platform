@@ -261,6 +261,8 @@ model QuantumJobSubmission {
   costCents  Int
   createdAt  DateTime @default(now())
   finishedAt DateTime? // backfilled opportunistically from iqm-proxy's finishedAt whenever GET jobs/[id] is called — null until then, even for already-completed jobs nobody has reopened since this field was added
+  circuit    Json? // the lr-circuit/v1 payload as submitted, shown as OpenQASM 3 in the job details; null for jobs submitted before this field existed
+  refundedAt DateTime? // set once when a cancelled job's charge is returned (api/lr/quantum/jobs/[id]/cancel); the compare-and-set on null is what keeps it to one refund
 }
 
 // Records a customer's paid, exclusive-access booking of a Rigetti QPU time

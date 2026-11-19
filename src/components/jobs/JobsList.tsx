@@ -7,14 +7,13 @@ import JobRowSkeleton from "@/components/jobs/JobRowSkeleton";
 import JobStatusBadge from "@/components/jobs/JobStatusBadge";
 import { formatDuration } from "@/lib/formatDuration";
 import { fetchQuantumJobDetail } from "@/lib/quantum/client";
-import type { JobStatus } from "@/types/job";
+import { TERMINAL_JOB_STATUSES as TERMINAL, type JobStatus } from "@/types/job";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { MdOpenInNew } from "react-icons/md";
 import { SiGooglecolab } from "react-icons/si";
 import { TbAtom2Filled } from "react-icons/tb";
 
-const TERMINAL = new Set(["COMPLETED", "FAILED", "ABORTED"]);
 export interface JobRow {
   jobId: string;
   backend: string;

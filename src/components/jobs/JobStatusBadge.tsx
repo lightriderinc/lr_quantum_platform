@@ -7,6 +7,7 @@ const CONFIG: Record<JobStatus, { dot: string; label: string; text: string }> = 
   COMPLETED: { dot: "bg-green-500", label: "bg-emerald-600 text-white", text: "Completed" },
   FAILED: { dot: "bg-red-500", label: "bg-red-200 text-red-800", text: "Failed" },
   ABORTED: { dot: "bg-gray-400", label: "bg-white text-gray-600", text: "Aborted" },
+  CANCELLED: { dot: "bg-gray-400", label: "bg-white text-gray-600", text: "Cancelled" },
 };
 
 export default function JobStatusBadge({ status }: { status: JobStatus }) {

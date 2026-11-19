@@ -221,6 +221,18 @@ export function circuitTemplate(id: CircuitTemplateId): CircuitTemplate {
   return BY_ID.get(id)!;
 }
 
+/**
+ * The template a submitted circuit came from, by its payload `name` (e.g.
+ * "bell" -> "Bell pair"), for job details. Null for anything else, such as
+ * "composer" or an API user's own name. "ghz" covers both GHZ entries.
+ */
+export function templateNameFor(payloadName: string | undefined): string | null {
+  if (!payloadName) return null;
+  PAYLOAD_NAMES ??= new Map(CIRCUIT_TEMPLATES.map((t) => [t.build().payload.name ?? "", t.name]));
+  return PAYLOAD_NAMES.get(payloadName) ?? null;
+}
+let PAYLOAD_NAMES: Map<string, string> | undefined;
+
 export function isCircuitTemplateId(value: string | undefined): value is CircuitTemplateId {
   return value !== undefined && BY_ID.has(value as CircuitTemplateId);
 }

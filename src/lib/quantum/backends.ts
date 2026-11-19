@@ -40,6 +40,8 @@ interface QuantumBackendConfig {
    * is 0 on these but they are NOT free; always check isPaidBackend().
    */
   pricedPerJob?: true;
+  /** qpu-proxy's POST /jobs/{uuid}/cancel works for this backend (IonQ). Others answer 501, so no Cancel button. */
+  cancelable?: true;
 }
 
 export const QUANTUM_BACKENDS = {
@@ -123,6 +125,7 @@ export const QUANTUM_BACKENDS = {
     maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator, ideal (noiseless)
+    cancelable: true,
   },
   "ionq-forte-1-simulator": {
     proxyPath: "/jobs",
@@ -131,6 +134,7 @@ export const QUANTUM_BACKENDS = {
     maxShots: DEFAULT_MAX_SHOTS,
     maxQubits: 29,
     costPerShotCents: 0, // free — IonQ cloud simulator with the Forte-1 noise model
+    cancelable: true,
   },
   "ionq-forte-1": {
     proxyPath: "/jobs",
@@ -140,6 +144,7 @@ export const QUANTUM_BACKENDS = {
     maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
+    cancelable: true,
   },
   "ionq-forte-enterprise-1": {
     proxyPath: "/jobs",
@@ -149,6 +154,7 @@ export const QUANTUM_BACKENDS = {
     maxQubits: 36,
     costPerShotCents: 0,
     pricedPerJob: true,
+    cancelable: true,
   },
 } as const satisfies Record<string, QuantumBackendConfig>;
 
@@ -156,6 +162,13 @@ export type QuantumBackendId = keyof typeof QUANTUM_BACKENDS;
 
 export function isValidBackend(id: string): id is QuantumBackendId {
   return id in QUANTUM_BACKENDS;
+}
+
+/** True when a job on this backend can be cancelled (see `cancelable`). Takes any string: job rows store the backend id as text. */
+export function canCancelOn(backend: string | undefined): boolean {
+  if (!backend || !isValidBackend(backend)) return false;
+  const config: QuantumBackendConfig = QUANTUM_BACKENDS[backend];
+  return config.cancelable === true;
 }
 
 /** Priced per job from IonQ's estimate (the Forte QPUs). */
