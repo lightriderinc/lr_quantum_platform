@@ -3,6 +3,8 @@
 import { handleSignIn } from "@/app/actions/auth";
 import BackendAvailabilityBadge from "@/components/backends/BackendAvailabilityBadge";
 import CreditsSummary from "@/components/billing/CreditsSummary";
+import type { CompareRun } from "@/components/composer/CompareResults";
+import CompareRunForm from "@/components/composer/CompareRunForm";
 import JobResultView from "@/components/jobs/JobResultView";
 import JobSubmitControls from "@/components/quantum/JobSubmitControls";
 import ShotsInput from "@/components/quantum/ShotsInput";
@@ -12,7 +14,8 @@ import { useRunnableBackends } from "@/hooks/useRunnableBackends";
 import { backendCondition } from "@/lib/backends/availability";
 import { BACKEND_TABS, backendTab, countByTab, type BackendTab } from "@/lib/backends/tabs";
 import type { LrCircuitPayload } from "@/lib/composer/circuit";
-import { getQuantumBackendId } from "@/lib/quantum/backends";
+import { COMPARE_MAX, type Distribution } from "@/lib/composer/compare";
+import { getQuantumBackendId, type QuantumBackendId } from "@/lib/quantum/backends";
 import type { Backend } from "@/types/backend";
 import Link from "next/link";
 import { useState } from "react";
@@ -25,6 +28,12 @@ import { MdArrowLeft } from "react-icons/md";
 // can be sent until the user picks one and clicks the submit button. Offline
 // or Unavailable backends are greyed out and can't be picked; the composer
 // clears the choice if the picked one goes unavailable.
+//
+// Compare mode: the list becomes checkboxes (2 to 4 backends, same greying
+// out), and CompareRunForm runs the circuit on all of them at once; the
+// composer shows the results (CompareResults).
+export type RunMode = "single" | "compare";
+
 export default function RunPanel({
   payload,
   templateName,
@@ -33,6 +42,10 @@ export default function RunPanel({
   onMeasureAll,
   selectedId,
   onSelect,
+  mode,
+  onModeChange,
+  ideal,
+  onCompareRun,
 }: {
   payload: LrCircuitPayload;
   /** The template the circuit still matches unedited, stored with the job; null otherwise. */
@@ -44,6 +57,11 @@ export default function RunPanel({
   /** Why this circuit can't run yet, per backend (empty when it can). */
   blockers: (backend: Backend) => string[];
   onMeasureAll: () => void;
+  mode: RunMode;
+  onModeChange: (mode: RunMode) => void;
+  /** The circuit's ideal distribution (in-browser statevector), or null above the preview limit. */
+  ideal: Distribution | null;
+  onCompareRun: (run: CompareRun) => void;
 }) {
   const { runnable, loading } = useRunnableBackends();
   const counts = countByTab(runnable);
@@ -59,7 +77,19 @@ export default function RunPanel({
   const reasons = selected ? blockers(selected) : [];
   const needsMeasure = payload.instructions.length > 0 && !payload.instructions.some((i) => i.name === "measure");
 
-  if (submission.displayedJob) {
+  // Compare: the checked backends, in list order. One that went unavailable
+  // or became too small for the circuit simply stops counting.
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const isDisabled = (b: Backend) => b.qubits < payload.num_qubits || backendCondition(b).blocked;
+  const compareBackends = runnable.filter((b) => compareIds.includes(b.id) && !isDisabled(b));
+  const compareSelection = compareBackends.flatMap((b) => {
+    const backend = getQuantumBackendId(b.id);
+    return backend ? [{ backend: backend as QuantumBackendId, name: b.name }] : [];
+  });
+  const compareReasons = [...new Set(compareBackends.flatMap(blockers))];
+  const compareFull = compareBackends.length >= COMPARE_MAX;
+
+  if (mode === "single" && submission.displayedJob) {
     const ranOn = submission.displayedJob.backend;
     return (
       <Panel>
@@ -93,7 +123,24 @@ export default function RunPanel({
 
   return (
     <Panel>
-      <h2 className="block text-md font-semibold text-gray-400 mb-4">Run</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="block text-md font-semibold text-gray-400">Run</h2>
+        <div className="inline-flex default-radius border border-gray-200 bg-white p-0.5 text-sm" role="group" aria-label="Run mode">
+          {(["single", "compare"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={mode === m}
+              onClick={() => onModeChange(m)}
+              className={`cursor-pointer default-radius px-2.5 py-1 transition-colors ${
+                mode === m ? "bg-[var(--brand-primary)] text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {m === "single" ? "Single" : "Compare"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div role="tablist" aria-label="Backend type" className="mb-3 flex gap-2 border-b border-gray-100">
         {BACKEND_TABS.map((t) => (
@@ -115,14 +162,19 @@ export default function RunPanel({
         ))}
       </div>
 
-      <div className="mb-4 flex max-h-72 flex-col gap-1.5 overflow-y-auto" role="radiogroup" aria-label="Backend">
+      <div
+        className="mb-4 flex max-h-72 flex-col gap-1.5 overflow-y-auto"
+        role={mode === "single" ? "radiogroup" : "group"}
+        aria-label={mode === "single" ? "Backend" : "Backends to compare"}
+      >
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <span key={i} className="block h-12 animate-pulse default-radius bg-gray-100" />)
           : visible.map((b) => {
               const tooSmall = b.qubits < payload.num_qubits;
-              const unavailable = backendCondition(b).blocked;
-              const disabled = tooSmall || unavailable;
-              const checked = b.id === selectedId;
+              const compare = mode === "compare";
+              const checked = compare ? compareBackends.some((c) => c.id === b.id) : b.id === selectedId;
+              // Compare: a fifth can't be checked until one is unchecked.
+              const disabled = isDisabled(b) || (compare && compareFull && !checked);
               return (
                 <label
                   key={b.id}
@@ -131,12 +183,16 @@ export default function RunPanel({
                   } ${checked ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-gray-100 bg-white"}`}
                 >
                   <input
-                    type="radio"
-                    name="composer-backend"
+                    type={compare ? "checkbox" : "radio"}
+                    name={compare ? "composer-compare" : "composer-backend"}
                     value={b.id}
                     checked={checked}
                     disabled={disabled}
-                    onChange={() => onSelect(b.id)}
+                    onChange={() =>
+                      compare
+                        ? setCompareIds(checked ? compareIds.filter((id) => id !== b.id) : [...compareIds.filter((id) => compareBackends.some((c) => c.id === id)), b.id])
+                        : onSelect(b.id)
+                    }
                     className="accent-[var(--brand-primary)]"
                   />
                   <span className="min-w-0 flex-1">
@@ -158,6 +214,15 @@ export default function RunPanel({
           </button>{" "}
           to run this circuit.
         </p>
+      ) : mode === "compare" ? (
+        <CompareRunForm
+          selection={compareSelection}
+          payload={payload}
+          templateName={templateName}
+          reasons={compareReasons}
+          ideal={ideal}
+          onRun={onCompareRun}
+        />
       ) : submission.stillCheckingCredits ? (
         <span className="block h-10 animate-pulse default-radius bg-gray-100" />
       ) : submission.blockedByCredits ? (

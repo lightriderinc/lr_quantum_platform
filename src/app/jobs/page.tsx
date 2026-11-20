@@ -6,8 +6,15 @@ export const metadata = {
   title: "Jobs | Light Rider Quantum",
 };
 
-export default async function JobsPage() {
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { isAuthenticated } = await getSession();
+  // /jobs?job=<id> opens that job's details (linked from composer Compare results).
+  const { job } = await searchParams;
+  const initialJobId = typeof job === "string" && job ? job : null;
 
   return (
     <div className="animate-fade-in-up">
@@ -17,7 +24,7 @@ export default async function JobsPage() {
       </p>
 
       {!isAuthenticated && <SignInRequired target="your jobs" />}
-      {isAuthenticated && <JobsList />}
+      {isAuthenticated && <JobsList initialJobId={initialJobId} />}
     </div>
   );
 }

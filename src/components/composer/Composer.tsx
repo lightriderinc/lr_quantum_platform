@@ -38,7 +38,8 @@ import CircuitGrid, { type PendingGate } from "./CircuitGrid";
 import GatePalette, { type DragPayload } from "./GatePalette";
 import ProbabilityPanel from "./ProbabilityPanel";
 import QasmPanel from "./QasmPanel";
-import RunPanel from "./RunPanel";
+import CompareResults, { type CompareRun } from "./CompareResults";
+import RunPanel, { type RunMode } from "./RunPanel";
 
 // A Bell pair to start from, so the preview and QASM show something useful
 // straight away. Fixed ids keep the server and client render identical.
@@ -102,8 +103,13 @@ export default function Composer({
   }, [circuit, loadedName]);
   // Backend chosen in the run panel: its qubit count is the editor's limit.
   const [backendId, setBackendId] = useState<string | null>(null);
+  // Single run or Compare; Compare checks several backends instead (each too
+  // small for the circuit is greyed out there), so the single choice limits nothing.
+  const [runMode, setRunMode] = useState<RunMode>("single");
+  // The last Compare run's results, kept while the page is open.
+  const [compareRun, setCompareRun] = useState<CompareRun | null>(null);
   const { runnable } = useRunnableBackends();
-  const chosenBackend = runnable.find((b) => b.id === backendId) ?? null;
+  const chosenBackend = runMode === "single" ? (runnable.find((b) => b.id === backendId) ?? null) : null;
   // The chosen backend went Offline or Unavailable: drop the choice, so
   // nothing can be submitted to it (set during render, no effect needed).
   if (chosenBackend && backendCondition(chosenBackend).blocked) setBackendId(null);
@@ -123,6 +129,11 @@ export default function Composer({
     return { preview: outcomeProbabilities(circuit, sv), qubits: qubitSummaries(sv) };
   }, [circuit]);
   const lateMeasures = useMemo(() => gatesAfterMeasure(circuit), [circuit]);
+  // The ideal distribution for Compare's reference card (outcome -> probability).
+  const ideal = useMemo(
+    () => (simulation ? Object.fromEntries(simulation.preview.outcomes.map((o) => [o.outcome, o.probability])) : null),
+    [simulation],
+  );
 
   function placeAt(name: GateName, qubit: number, column: number) {
     const def = gateDef(name);
@@ -372,6 +383,7 @@ export default function Composer({
           </div>
         </section>
 
+        {compareRun && <CompareResults key={compareRun.id} run={compareRun} onClose={() => setCompareRun(null)} />}
         <ProbabilityPanel preview={simulation?.preview ?? null} measuredMidCircuit={lateMeasures} />
         <QasmPanel qasm={qasm} />
       </div>
@@ -385,6 +397,10 @@ export default function Composer({
           onSelect={setBackendId}
           blockers={(backend) => runBlockers(circuit, backend)}
           onMeasureAll={() => dispatch({ type: "measureAll" })}
+          mode={runMode}
+          onModeChange={setRunMode}
+          ideal={ideal}
+          onCompareRun={setCompareRun}
         />
       </div>
     </div>

@@ -89,8 +89,9 @@ const HEADERS = [
   "Mode",
 ];
 
-export default function JobsList() {
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+/** `initialJobId` (from /jobs?job=<id>, e.g. a composer Compare card) opens that job's details once the list has it. */
+export default function JobsList({ initialJobId = null }: { initialJobId?: string | null }) {
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialJobId);
 
   const {
     data: jobs,
