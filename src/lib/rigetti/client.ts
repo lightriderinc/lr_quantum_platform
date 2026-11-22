@@ -1,6 +1,7 @@
 import type { Backend } from "@/types/backend";
 import { deriveAvailability } from "@/lib/backends/availability";
 import { asMicroseconds, asPercent, median } from "@/lib/metrics";
+import { CEPHEUS_1_108Q_PUBLISHED_SPECS } from "./cepheusPublishedSpecs";
 
 // Live Rigetti QCS integration. Maps each hardcoded processor's Instruction
 // Set Architecture (ISA) into our Backend shape. Field names below were
@@ -141,23 +142,28 @@ function mapProcessor(id: string, isa: RigettiISA): Backend {
 // separate, hardcoded entry rather than the real one with a status override.
 // One difference from IQM's mocks: IQM's still live-fetch architecture from a
 // real ":mock"-suffixed Resonance endpoint; Rigetti/QCS has no equivalent
-// mock processor to query, so this one is fully static. `qubits` mirrors the
-// real Cepheus-1-108Q's actual live node count (107, not the nominal "108Q"
-// in its name) since it's a mock of that same device.
+// mock processor to query, so this one is fully static: its specs are
+// Rigetti's own published figures for the real device (sources and date in
+// ./cepheusPublishedSpecs.ts). `qubits` is 107, the real Cepheus-1-108Q's live
+// node count and what Rigetti's site lists, not the nominal "108Q" in its name.
 function mockBackend(): Backend {
   const name = "Rigetti Cepheus-1-108Q (mock)";
+  const published = CEPHEUS_1_108Q_PUBLISHED_SPECS;
   return {
     id: "rigetti.qpu.Cepheus-1-108Q:mock",
     name,
     type: "Simulator",
     status: "online",
-    qubits: 107,
+    qubits: published.qubits,
     provider: "Rigetti",
     queueDepth: null,
     // Simulators are always available, same as IQM's mocks.
     availability: deriveAvailability(undefined, true),
     details: {
-      description: `${name} is a noise-model simulator of Rigetti Cepheus-1-108Q. Free and unlimited.`,
+      ...published.details,
+      description:
+        `${name} is a noise-model simulator of Rigetti Cepheus-1-108Q. Free and unlimited. ` +
+        `The specs below are Rigetti's published medians for the real QPU, not measurements of this simulator.`,
     },
   };
 }
