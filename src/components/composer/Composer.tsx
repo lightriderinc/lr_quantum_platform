@@ -38,6 +38,7 @@ import CircuitGrid, { type PendingGate } from "./CircuitGrid";
 import GatePalette, { type DragPayload } from "./GatePalette";
 import ProbabilityPanel from "./ProbabilityPanel";
 import QasmPanel from "./QasmPanel";
+import StatePanel from "./StatePanel";
 import CompareResults, { type CompareRun } from "./CompareResults";
 import RunPanel, { type RunMode } from "./RunPanel";
 
@@ -126,7 +127,7 @@ export default function Composer({
   const simulation = useMemo(() => {
     if (circuit.numQubits > PREVIEW_MAX_QUBITS) return null;
     const sv = simulate(circuit);
-    return { preview: outcomeProbabilities(circuit, sv), qubits: qubitSummaries(sv) };
+    return { state: sv, preview: outcomeProbabilities(circuit, sv), qubits: qubitSummaries(sv) };
   }, [circuit]);
   const lateMeasures = useMemo(() => gatesAfterMeasure(circuit), [circuit]);
   // The ideal distribution for Compare's reference card (outcome -> probability).
@@ -385,7 +386,11 @@ export default function Composer({
 
         {compareRun && <CompareResults key={compareRun.id} run={compareRun} onClose={() => setCompareRun(null)} />}
         <ProbabilityPanel preview={simulation?.preview ?? null} measuredMidCircuit={lateMeasures} />
-        <QasmPanel qasm={qasm} />
+        {/* Side by side on wide screens, stacked otherwise. */}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <QasmPanel qasm={qasm} />
+          <StatePanel state={simulation?.state ?? null} />
+        </div>
       </div>
 
       <div className="min-w-0 lg:sticky lg:top-6 lg:self-start">
